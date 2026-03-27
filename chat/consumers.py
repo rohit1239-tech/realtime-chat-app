@@ -58,6 +58,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if message_type == 'message':
             content = data.get('content', '')
             message = await self.save_message(content)
+
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -68,6 +69,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'message_id': message.id
                 }
             )
+
+            # Send email notifications to offline members
+            await self.notify_offline_members(content)
+
+        async def notify_offline_members(self, content):
+            from chat.tasks import send_message_notification
+            members = await self.get_room_members()
+            for member in members:
+                if member.id != self.user.id:
+                    send_message_notification.delay(
+                        self.user.username,
+                        self.room_name,
+                        content,
+                        member.id
+                    )
+
+        @database_sync_to_async
+        def get_room_members(self):
+            room = Room.objects.get(name=self.room_name)
+            return list(room.members.all())
 
     async def chat_message(self, event):
         await self.send(text_data=json.dumps({
