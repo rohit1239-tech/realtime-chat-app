@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'channels',
     # Our apps
+    'rest_framework_simplejwt.token_blacklist',
     'accounts',
     'chat',
 ]
@@ -93,3 +94,13 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+}
