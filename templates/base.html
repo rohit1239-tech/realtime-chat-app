@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ChatApp{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f0f1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #6c63ff;
+            color: white;
+        }
+        .btn-primary:hover { background: #5a52e0; }
+        .btn-danger {
+            background: #ff4757;
+            color: white;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #2a2a3d;
+            border-radius: 8px;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        input:focus, textarea:focus {
+            border-color: #6c63ff;
+        }
+        .alert {
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        .alert-error { background: #ff475720; color: #ff4757; border: 1px solid #ff4757; }
+        .alert-success { background: #2ed57320; color: #2ed573; border: 1px solid #2ed573; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% block content %}{% endblock %}
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

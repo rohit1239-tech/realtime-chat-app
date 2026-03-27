@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}Chats — ChatApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .app-container {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+    }
+    .sidebar {
+        width: 320px;
+        background: #1a1a2e;
+        border-right: 1px solid #2a2a3d;
+        display: flex;
+        flex-direction: column;
+    }
+    .sidebar-header {
+        padding: 20px;
+        border-bottom: 1px solid #2a2a3d;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .sidebar-header h2 { font-size: 20px; color: #6c63ff; }
+    .user-info {
+        font-size: 13px;
+        color: #888;
+        padding: 12px 20px;
+        border-bottom: 1px solid #2a2a3d;
+    }
+    .user-info span { color: #6c63ff; font-weight: 600; }
+    .create-room {
+        padding: 16px 20px;
+        border-bottom: 1px solid #2a2a3d;
+        display: flex;
+        gap: 8px;
+    }
+    .create-room input { flex: 1; }
+    .rooms-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .room-item {
+        padding: 14px 20px;
+        cursor: pointer;
+        transition: background 0.2s;
+        border-bottom: 1px solid #1f1f35;
+    }
+    .room-item:hover { background: #2a2a3d; }
+    .room-item.active { background: #2a2a3d; border-left: 3px solid #6c63ff; }
+    .room-name { font-weight: 600; font-size: 15px; }
+    .room-last-msg { font-size: 12px; color: #888; margin-top: 4px; }
+    .room-meta { font-size: 11px; color: #666; margin-top: 2px; }
+    .main-content {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #888;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .main-content h3 { font-size: 24px; color: #6c63ff; }
+    .logout-btn {
+        padding: 6px 14px;
+        font-size: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>💬 ChatApp</h2>
+            <button class="btn btn-danger logout-btn" onclick="logout()">Logout</button>
+        </div>
+        <div class="user-info">
+            Logged in as <span id="current-user"></span>
+        </div>
+        <div class="create-room">
+            <input type="text" id="room-name-input" placeholder="New room name...">
+            <button class="btn btn-primary" onclick="createRoom()">+</button>
+        </div>
+        <div class="rooms-list" id="rooms-list">
+            <div style="padding:20px;color:#888;font-size:14px;">Loading rooms...</div>
+        </div>
+    </div>
+    <div class="main-content">
+        <h3>Welcome to ChatApp!</h3>
+        <p>Select a room or create a new one to start chatting.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const token = localStorage.getItem('access_token');
+    const username = localStorage.getItem('username');
+
+    if (!token) window.location.href = '/login/';
+
+    document.getElementById('current-user').textContent = username;
+
+    async function fetchRooms() {
+        const response = await fetch('/api/rooms/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.status === 401) {
+            window.location.href = '/login/';
+            return;
+        }
+        const rooms = await response.json();
+        const list = document.getElementById('rooms-list');
+
+        if (rooms.length === 0) {
+            list.innerHTML = '<div style="padding:20px;color:#888;font-size:14px;">No rooms yet. Create one!</div>';
+            return;
+        }
+
+        list.innerHTML = rooms.map(room => `
+            <div class="room-item" onclick="openRoom('${room.name}')">
+                <div class="room-name"># ${room.name}</div>
+                <div class="room-last-msg">
+                    ${room.last_message ? room.last_message.sender + ': ' + room.last_message.content.substring(0, 40) : 'No messages yet'}
+                </div>
+                <div class="room-meta">${room.member_count} members</div>
+            </div>
+        `).join('');
+    }
+
+    async function createRoom() {
+        const name = document.getElementById('room-name-input').value.trim();
+        if (!name) return;
+
+        const response = await fetch('/api/rooms/', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, room_type: 'group' })
+        });
+
+        if (response.ok) {
+            document.getElementById('room-name-input').value = '';
+            fetchRooms();
+        } else {
+            const data = await response.json();
+            alert(JSON.stringify(data));
+        }
+    }
+
+    function openRoom(roomName) {
+        window.location.href = `/chat/${roomName}/`;
+    }
+
+    function logout() {
+        localStorage.clear();
+        window.location.href = '/login/';
+    }
+
+    fetchRooms();
+</script>
+{% endblock %}

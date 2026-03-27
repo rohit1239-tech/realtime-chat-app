@@ -1,0 +1,294 @@
+{% extends 'base.html' %}
+{% block title %}{{ room_name }} — ChatApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .app-container { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar {
+        width: 260px;
+        background: #1a1a2e;
+        border-right: 1px solid #2a2a3d;
+        display: flex;
+        flex-direction: column;
+    }
+    .sidebar-header {
+        padding: 20px;
+        border-bottom: 1px solid #2a2a3d;
+    }
+    .sidebar-header h2 { font-size: 18px; color: #6c63ff; }
+    .back-btn {
+        font-size: 13px;
+        color: #888;
+        cursor: pointer;
+        margin-bottom: 8px;
+        display: inline-block;
+    }
+    .back-btn:hover { color: #6c63ff; }
+    .members-list { padding: 12px 0; flex: 1; overflow-y: auto; }
+    .member-item {
+        padding: 8px 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+    }
+    .status-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: #888;
+        flex-shrink: 0;
+    }
+    .status-dot.online { background: #2ed573; }
+    .chat-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .chat-header {
+        padding: 16px 24px;
+        background: #1a1a2e;
+        border-bottom: 1px solid #2a2a3d;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .chat-header h3 { font-size: 18px; }
+    .connection-status {
+        font-size: 12px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background: #ff475720;
+        color: #ff4757;
+    }
+    .connection-status.connected {
+        background: #2ed57320;
+        color: #2ed573;
+    }
+    .messages-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .message-bubble {
+        max-width: 65%;
+        padding: 10px 14px;
+        border-radius: 12px;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    .message-bubble.received {
+        background: #2a2a3d;
+        align-self: flex-start;
+        border-bottom-left-radius: 4px;
+    }
+    .message-bubble.sent {
+        background: #6c63ff;
+        align-self: flex-end;
+        border-bottom-right-radius: 4px;
+    }
+    .message-sender {
+        font-size: 11px;
+        color: #aaa;
+        margin-bottom: 4px;
+        font-weight: 600;
+    }
+    .message-time {
+        font-size: 10px;
+        color: #888;
+        margin-top: 4px;
+        text-align: right;
+    }
+    .system-message {
+        text-align: center;
+        font-size: 12px;
+        color: #888;
+        padding: 4px;
+    }
+    .chat-input-area {
+        padding: 16px 24px;
+        background: #1a1a2e;
+        border-top: 1px solid #2a2a3d;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+    .chat-input-area input { flex: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span class="back-btn" onclick="window.location.href='/chat/'">← Back</span>
+            <h2># {{ room_name }}</h2>
+        </div>
+        <div style="padding:12px 20px;font-size:12px;color:#888;border-bottom:1px solid #2a2a3d;">
+            MEMBERS
+        </div>
+        <div class="members-list" id="members-list"></div>
+    </div>
+
+    <div class="chat-area">
+        <div class="chat-header">
+            <h3># {{ room_name }}</h3>
+            <span class="connection-status" id="conn-status">Connecting...</span>
+        </div>
+
+        <div class="messages-container" id="messages-container"></div>
+
+        <div class="chat-input-area">
+            <input
+                type="text"
+                id="message-input"
+                placeholder="Type a message..."
+                onkeypress="handleKeyPress(event)"
+            >
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const token = localStorage.getItem('access_token');
+    const username = localStorage.getItem('username');
+    const roomName = '{{ room_name }}';
+
+    if (!token) window.location.href = '/login/';
+
+    let socket = null;
+    const onlineUsers = new Set();
+
+    // Load message history
+    async function loadMessages() {
+        try {
+            const response = await fetch(`/api/rooms/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const rooms = await response.json();
+            const room = rooms.find(r => r.name === roomName);
+
+            if (!room) return;
+
+            // Load members
+            renderMembers(room.members);
+
+            // Load message history
+            const msgResponse = await fetch(`/api/rooms/${room.id}/messages/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const messages = await msgResponse.json();
+            messages.forEach(msg => addMessage(msg.sender.username, msg.content, msg.timestamp, false));
+            scrollToBottom();
+        } catch (err) {
+            console.error('Error loading messages:', err);
+        }
+    }
+
+    function renderMembers(members) {
+        const list = document.getElementById('members-list');
+        list.innerHTML = members.map(m => `
+            <div class="member-item" id="member-${m.username}">
+                <div class="status-dot ${m.is_online ? 'online' : ''}"></div>
+                <span>${m.username}</span>
+            </div>
+        `).join('');
+    }
+
+    // Connect WebSocket with JWT token in URL
+    function connectWebSocket() {
+        socket = new WebSocket(`ws://127.0.0.1:8000/ws/chat/${roomName}/?token=${token}`);
+
+        socket.onopen = () => {
+            document.getElementById('conn-status').textContent = '● Connected';
+            document.getElementById('conn-status').className = 'connection-status connected';
+        };
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.type === 'message') {
+                addMessage(data.sender, data.message, data.timestamp, true);
+                scrollToBottom();
+            } else if (data.type === 'status') {
+                addSystemMessage(`${data.user} is now ${data.status}`);
+                updateMemberStatus(data.user, data.status === 'online');
+            }
+        };
+
+        socket.onclose = () => {
+            document.getElementById('conn-status').textContent = '● Disconnected';
+            document.getElementById('conn-status').className = 'connection-status';
+            // Reconnect after 3 seconds
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        socket.onerror = (err) => {
+            console.error('WebSocket error:', err);
+        };
+    }
+
+    function addMessage(sender, content, timestamp, isNew) {
+        const container = document.getElementById('messages-container');
+        const isMine = sender === username;
+        const time = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        const div = document.createElement('div');
+        div.className = `message-bubble ${isMine ? 'sent' : 'received'}`;
+        div.innerHTML = `
+            ${!isMine ? `<div class="message-sender">${sender}</div>` : ''}
+            <div>${content}</div>
+            <div class="message-time">${time}</div>
+        `;
+        container.appendChild(div);
+    }
+
+    function addSystemMessage(text) {
+        const container = document.getElementById('messages-container');
+        const div = document.createElement('div');
+        div.className = 'system-message';
+        div.textContent = text;
+        container.appendChild(div);
+        scrollToBottom();
+    }
+
+    function updateMemberStatus(user, isOnline) {
+        const memberEl = document.getElementById(`member-${user}`);
+        if (memberEl) {
+            const dot = memberEl.querySelector('.status-dot');
+            if (isOnline) dot.classList.add('online');
+            else dot.classList.remove('online');
+        }
+    }
+
+    function sendMessage() {
+        const input = document.getElementById('message-input');
+        const content = input.value.trim();
+        if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+
+        socket.send(JSON.stringify({
+            type: 'message',
+            content: content
+        }));
+        input.value = '';
+    }
+
+    function handleKeyPress(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+
+    function scrollToBottom() {
+        const container = document.getElementById('messages-container');
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // Init
+    loadMessages();
+    connectWebSocket();
+</script>
+{% endblock %}
