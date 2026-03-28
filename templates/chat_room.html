@@ -213,6 +213,8 @@
             const data = JSON.parse(event.data);
 
             if (data.type === 'message') {
+                // Skip if it's our own message (already shown locally)
+                if (data.sender === username) return;
                 addMessage(data.sender, data.message, data.timestamp, true);
                 scrollToBottom();
             } else if (data.type === 'status') {
@@ -220,7 +222,6 @@
                 updateMemberStatus(data.user, data.status === 'online');
             }
         };
-
         socket.onclose = () => {
             document.getElementById('conn-status').textContent = '● Disconnected';
             document.getElementById('conn-status').className = 'connection-status';
@@ -275,6 +276,11 @@
             type: 'message',
             content: content
         }));
+
+        // Show your own message immediately without waiting for broadcast
+        addMessage(username, content, new Date().toISOString(), true);
+        scrollToBottom();
+
         input.value = '';
     }
 

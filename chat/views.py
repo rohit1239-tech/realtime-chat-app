@@ -62,3 +62,10 @@ class UserListView(generics.ListAPIView):
 
     def get_queryset(self):
         return User.objects.exclude(id=self.request.user.id)
+    
+class AllRoomsView(generics.ListAPIView):
+    serializer_class = RoomSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Room.objects.all()

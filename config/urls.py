@@ -7,5 +7,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
     path('api/', include('chat.urls')),
-    path('', include('chat.frontend_urls')),  # frontend routes
+    path('auth/', include('django.contrib.auth.urls')),  # ← add this
+    path('', include('chat.frontend_urls')),
 ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

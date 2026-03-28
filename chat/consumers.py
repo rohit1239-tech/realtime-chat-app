@@ -1,4 +1,5 @@
 import json
+from urllib.parse import unquote
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
@@ -9,10 +10,10 @@ from .models import Room, Message, UserProfile
 class ChatConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
-        self.room_name = self.scope['url_route']['kwargs']['room_name']
-        self.room_group_name = f'chat_{self.room_name}'
+        raw_room_name = self.scope['url_route']['kwargs']['room_name']
+        self.room_name = unquote(raw_room_name)  # handles spaces & special chars
+        self.room_group_name = f'chat_{self.room_name}'.replace(' ', '_')
 
-        # Get user from JWT token in URL
         self.user = await self.get_user_from_token()
 
         if self.user is None:
@@ -46,10 +47,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'status': 'offline'
                 }
             )
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
+        if hasattr(self, 'room_group_name'):
+            await self.channel_layer.group_discard(
+                self.room_group_name,
+                self.channel_name
+            )
 
     async def receive(self, text_data):
         data = json.loads(text_data)
@@ -69,26 +71,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'message_id': message.id
                 }
             )
-
-            # Send email notifications to offline members
             await self.notify_offline_members(content)
-
-        async def notify_offline_members(self, content):
-            from chat.tasks import send_message_notification
-            members = await self.get_room_members()
-            for member in members:
-                if member.id != self.user.id:
-                    send_message_notification.delay(
-                        self.user.username,
-                        self.room_name,
-                        content,
-                        member.id
-                    )
-
-        @database_sync_to_async
-        def get_room_members(self):
-            room = Room.objects.get(name=self.room_name)
-            return list(room.members.all())
 
     async def chat_message(self, event):
         await self.send(text_data=json.dumps({
@@ -106,17 +89,33 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'status': event['status']
         }))
 
+    async def notify_offline_members(self, content):
+        try:
+            from chat.tasks import send_message_notification
+            members = await self.get_room_members()
+            for member in members:
+                if member.id != self.user.id:
+                    send_message_notification.delay(
+                        self.user.username,
+                        self.room_name,
+                        content,
+                        member.id
+                    )
+        except Exception:
+            pass
+
     @database_sync_to_async
     def get_user_from_token(self):
         try:
             query_string = self.scope.get('query_string', b'').decode()
-            params = dict(p.split('=') for p in query_string.split('&') if '=' in p)
+            params = dict(
+                p.split('=') for p in query_string.split('&') if '=' in p
+            )
             token_key = params.get('token')
             if not token_key:
                 return None
             access_token = AccessToken(token_key)
-            user = User.objects.get(id=access_token['user_id'])
-            return user
+            return User.objects.get(id=access_token['user_id'])
         except Exception:
             return None
 
@@ -134,3 +133,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         profile, _ = UserProfile.objects.get_or_create(user=self.user)
         profile.is_online = status
         profile.save()
+
+    @database_sync_to_async
+    def get_room_members(self):
+        room = Room.objects.get(name=self.room_name)
+        return list(room.members.all())
