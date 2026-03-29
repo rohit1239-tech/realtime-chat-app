@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+{% block title %}DM — ChatApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .app-container { display: flex; height: 100vh; overflow: hidden; }
+    .chat-area { flex: 1; display: flex; flex-direction: column; }
+    .chat-header {
+        padding: 16px 24px;
+        background: #1a1a2e;
+        border-bottom: 1px solid #2a2a3d;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .chat-header h3 { font-size: 18px; }
+    .back-btn {
+        font-size: 13px; color: #888;
+        cursor: pointer; text-decoration: none;
+    }
+    .back-btn:hover { color: #6c63ff; }
+    .messages-container {
+        flex: 1; overflow-y: auto;
+        padding: 20px 24px;
+        display: flex; flex-direction: column; gap: 12px;
+    }
+    .message-bubble {
+        max-width: 65%; padding: 10px 14px;
+        border-radius: 12px; font-size: 14px; line-height: 1.5;
+    }
+    .message-bubble.received {
+        background: #2a2a3d; align-self: flex-start;
+        border-bottom-left-radius: 4px;
+    }
+    .message-bubble.sent {
+        background: #6c63ff; align-self: flex-end;
+        border-bottom-right-radius: 4px;
+    }
+    .message-time {
+        font-size: 10px; color: #888;
+        margin-top: 4px; text-align: right;
+    }
+    .chat-input-area {
+        padding: 16px 24px; background: #1a1a2e;
+        border-top: 1px solid #2a2a3d;
+        display: flex; gap: 12px; align-items: center;
+    }
+    .chat-input-area input { flex: 1; }
+    .online-badge {
+        font-size: 12px; padding: 3px 10px;
+        border-radius: 20px; background: #2ed57320; color: #2ed573;
+    }
+    .offline-badge {
+        font-size: 12px; padding: 3px 10px;
+        border-radius: 20px; background: #88888820; color: #888;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-container">
+    <div class="chat-area">
+        <div class="chat-header">
+            <div style="display:flex;align-items:center;gap:12px">
+                <a href="/chat/" class="back-btn">← Back</a>
+                <h3 id="dm-title">💬 {{ other_username }}</h3>
+            </div>
+            <span id="online-status" class="offline-badge">Offline</span>
+        </div>
+
+        <div class="messages-container" id="messages-container">
+            <div style="text-align:center;color:#888;font-size:13px;padding:20px">
+                Loading messages...
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <input
+                type="text"
+                id="message-input"
+                placeholder="Type a message..."
+                onkeypress="handleKeyPress(event)"
+            >
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const token = localStorage.getItem('access_token');
+    const username = localStorage.getItem('username');
+    const otherUsername = '{{ other_username }}';
+
+    if (!token) window.location.href = '/login/';
+
+    async function loadMessages() {
+        const response = await fetch(`/api/dm/${otherUsername}/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.status === 401) { window.location.href = '/login/'; return; }
+
+        const messages = await response.json();
+        const container = document.getElementById('messages-container');
+
+        if (messages.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center;color:#888;font-size:13px;padding:40px">
+                    No messages yet. Say hello to ${otherUsername}! 👋
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+        messages.forEach(msg => addMessage(msg.sender.username, msg.content, msg.timestamp));
+        scrollToBottom();
+
+        // Update online status
+        const lastMsg = messages[messages.length - 1];
+        const otherUser = lastMsg.sender.username === otherUsername
+            ? lastMsg.sender : lastMsg.receiver;
+        updateOnlineStatus(otherUser.is_online);
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('message-input');
+        const content = input.value.trim();
+        if (!content) return;
+
+        const response = await fetch(`/api/dm/${otherUsername}/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+        });
+
+        if (response.ok) {
+            addMessage(username, content, new Date().toISOString());
+            input.value = '';
+            scrollToBottom();
+        }
+    }
+
+    function addMessage(sender, content, timestamp) {
+        const container = document.getElementById('messages-container');
+        const isMine = sender === username;
+        const time = new Date(timestamp).toLocaleTimeString(
+            [], { hour: '2-digit', minute: '2-digit' }
+        );
+        const div = document.createElement('div');
+        div.className = `message-bubble ${isMine ? 'sent' : 'received'}`;
+        div.innerHTML = `
+            <div>${content}</div>
+            <div class="message-time">${time}</div>
+        `;
+        container.appendChild(div);
+    }
+
+    function updateOnlineStatus(isOnline) {
+        const badge = document.getElementById('online-status');
+        badge.textContent = isOnline ? 'Online' : 'Offline';
+        badge.className = isOnline ? 'online-badge' : 'offline-badge';
+    }
+
+    function handleKeyPress(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+
+    function scrollToBottom() {
+        const c = document.getElementById('messages-container');
+        c.scrollTop = c.scrollHeight;
+    }
+
+    loadMessages();
+    // Refresh messages every 3 seconds for DMs
+    setInterval(loadMessages, 3000);
+</script>
+{% endblock %}

@@ -101,8 +101,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),   # 1 day instead of 60 mins
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
 }
@@ -126,7 +126,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.getenv('yengantiwarrohit1239@gmail.com', '')
-EMAIL_HOST_PASSWORD = os.getenv('hijq pvwn xeur ubkv', '')
+EMAIL_HOST_PASSWORD = os.getenv('nunj sxgx jqoq ijog', '')
 DEFAULT_FROM_EMAIL = os.getenv('yengantiwarrohit1239@gmail.com', '')
 
 # Password reset URL

@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% block title %}Admin Panel — ChatApp{% endblock %}
+
+{% block extra_css %}
+<style>
+    .admin-container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
+    .admin-header { margin-bottom: 32px; }
+    .admin-header h2 { font-size: 24px; color: #6c63ff; }
+    .admin-header p { color: #888; font-size: 14px; margin-top: 4px; }
+    .back-link {
+        color: #888; font-size: 13px;
+        text-decoration: none; display: inline-block; margin-bottom: 16px;
+    }
+    .back-link:hover { color: #6c63ff; }
+    .room-card {
+        background: #1a1a2e; border: 1px solid #2a2a3d;
+        border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    }
+    .room-card h3 {
+        font-size: 16px; margin-bottom: 12px;
+        color: #e0e0e0; display: flex; align-items: center; gap: 8px;
+    }
+    .request-item {
+        display: flex; justify-content: space-between;
+        align-items: center; padding: 12px;
+        background: #0f0f1a; border-radius: 8px; margin-bottom: 8px;
+        border: 1px solid #2a2a3d;
+    }
+    .request-user { font-size: 14px; font-weight: 500; }
+    .request-time { font-size: 12px; color: #888; margin-top: 2px; }
+    .action-btns { display: flex; gap: 8px; }
+    .accept-btn {
+        padding: 6px 16px; font-size: 13px;
+        background: #2ed573; color: #0f0f1a;
+        border: none; border-radius: 6px;
+        cursor: pointer; font-weight: 600;
+    }
+    .accept-btn:hover { background: #26c065; }
+    .reject-btn {
+        padding: 6px 16px; font-size: 13px;
+        background: transparent; color: #ff4757;
+        border: 1px solid #ff4757;
+        border-radius: 6px; cursor: pointer;
+    }
+    .reject-btn:hover { background: #ff4757; color: white; }
+    .empty-msg { color: #888; font-size: 13px; padding: 8px 0; }
+    .badge {
+        background: #6c63ff; color: white;
+        font-size: 11px; padding: 2px 8px;
+        border-radius: 20px;
+    }
+    .no-rooms {
+        text-align: center; color: #888;
+        padding: 40px 20px; font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <a href="/chat/" class="back-link">← Back to Chat</a>
+    <div class="admin-header">
+        <h2>🛡️ Admin Panel</h2>
+        <p>Manage join requests for rooms you created</p>
+    </div>
+    <div id="rooms-container">
+        <div style="color:#888;text-align:center;padding:40px">Loading...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const token = localStorage.getItem('access_token');
+    const username = localStorage.getItem('username');
+    if (!token) window.location.href = '/login/';
+
+    async function loadAdminPanel() {
+        const container = document.getElementById('rooms-container');
+
+        // Fetch ALL rooms
+        const res = await fetch('/api/all-rooms/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const allRooms = await res.json();
+
+        // Filter rooms created by ME
+        const myRooms = allRooms.filter(r => r.created_by.username === username);
+
+        if (myRooms.length === 0) {
+            container.innerHTML = `
+                <div class="no-rooms">
+                    You haven't created any rooms yet.<br>
+                    <a href="/chat/" style="color:#6c63ff">Go create one!</a>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+        for (const room of myRooms) {
+            await renderRoomCard(room, container);
+        }
+    }
+
+    async function renderRoomCard(room, container) {
+        const res = await fetch(`/api/rooms/${room.id}/requests/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) return;
+        const requests = await res.json();
+
+        const card = document.createElement('div');
+        card.className = 'room-card';
+        card.id = `room-card-${room.id}`;
+
+        card.innerHTML = `
+            <h3>
+                # ${room.name}
+                ${requests.length > 0
+                    ? `<span class="badge">${requests.length} pending</span>`
+                    : '<span style="font-size:12px;color:#888">No pending requests</span>'
+                }
+            </h3>
+            <div id="requests-${room.id}">
+                ${requests.length === 0
+                    ? '<div class="empty-msg">✅ All requests handled</div>'
+                    : requests.map(req => `
+                        <div class="request-item" id="req-${req.id}">
+                            <div>
+                                <div class="request-user">👤 ${req.user.username}</div>
+                                <div class="request-time">
+                                    Requested: ${new Date(req.created_at).toLocaleString()}
+                                </div>
+                            </div>
+                            <div class="action-btns">
+                                <button class="accept-btn"
+                                    onclick="handleRequest(${room.id}, ${req.id}, 'accept')">
+                                    ✓ Accept
+                                </button>
+                                <button class="reject-btn"
+                                    onclick="handleRequest(${room.id}, ${req.id}, 'reject')">
+                                    ✗ Reject
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')
+                }
+            </div>
+        `;
+        container.appendChild(card);
+    }
+
+    async function handleRequest(roomId, requestId, action) {
+        const res = await fetch(`/api/rooms/${roomId}/requests/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ request_id: requestId, action })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            // Remove from UI instantly
+            const reqEl = document.getElementById(`req-${requestId}`);
+            if (reqEl) reqEl.remove();
+            // Show success message briefly
+            const msg = document.createElement('div');
+            msg.style.cssText = 'color:#2ed573;font-size:13px;padding:8px';
+            msg.textContent = `✅ ${data.message}`;
+            document.getElementById(`requests-${roomId}`)?.prepend(msg);
+            setTimeout(() => msg.remove(), 3000);
+        }
+    }
+
+    loadAdminPanel();
+    // Refresh every 30 seconds to catch new requests
+    setInterval(loadAdminPanel, 30000);
+</script>
+{% endblock %}

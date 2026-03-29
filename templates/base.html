@@ -55,6 +55,43 @@
     </style>
     {% block extra_css %}{% endblock %}
 </head>
+
+
+
+
+<script>
+async function refreshToken() {
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh) return;  // Don't redirect, just return
+
+    try {
+        const res = await fetch('/api/auth/login/refresh/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem('access_token', data.access);
+        } else {
+            localStorage.clear();
+        }
+    } catch (err) {
+        console.error('Token refresh failed:', err);
+    }
+}
+
+// Only auto-refresh on protected pages, not on login/register
+const currentPath = window.location.pathname;
+const publicPages = ['/login/', '/register/', '/'];
+if (!publicPages.includes(currentPath)) {
+    refreshToken();
+    setInterval(refreshToken, 50 * 60 * 1000);
+}
+</script>
+
+
+
 <body>
     {% block content %}{% endblock %}
     {% block extra_js %}{% endblock %}

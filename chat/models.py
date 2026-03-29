@@ -13,6 +13,7 @@ class Room(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='created_rooms'
     )
+    requires_approval = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -40,3 +41,40 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {'Online' if self.is_online else 'Offline'}"
+
+
+class JoinRequest(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+    )
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='join_requests')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='join_requests')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('room', 'user')
+
+    def __str__(self):
+        return f"{self.user.username} → {self.room.name} ({self.status})"
+
+
+class DirectMessage(models.Model):
+    sender = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_dms'
+    )
+    receiver = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='received_dms'
+    )
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['timestamp']
+
+    def __str__(self):
+        return f"{self.sender.username} → {self.receiver.username}: {self.content[:30]}"

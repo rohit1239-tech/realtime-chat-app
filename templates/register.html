@@ -67,6 +67,9 @@
         <div class="form-group">
             <label>Password</label>
             <input type="password" id="password" placeholder="Create a password">
+            <div style="font-size:11px;color:#666;margin-top:6px;line-height:1.6">
+                Must have: 8+ chars · uppercase · lowercase · number · special char (!@#$%)
+            </div>
         </div>
         <div class="form-group">
             <label>Confirm Password</label>
@@ -98,8 +101,21 @@
             return;
         }
 
+        // Frontend validation
+        if (username.length < 3) {
+            alertBox.innerHTML = '<div class="alert alert-error">Username must be at least 3 characters.</div>';
+            return;
+        }
+        if (!/^[a-zA-Z0-9._]+$/.test(username)) {
+            alertBox.innerHTML = '<div class="alert alert-error">Username can only contain letters, numbers, dots and underscores.</div>';
+            return;
+        }
         if (password !== password2) {
             alertBox.innerHTML = '<div class="alert alert-error">Passwords do not match.</div>';
+            return;
+        }
+        if (password.length < 8) {
+            alertBox.innerHTML = '<div class="alert alert-error">Password must be at least 8 characters.</div>';
             return;
         }
 
@@ -113,8 +129,11 @@
             const data = await response.json();
 
             if (response.ok) {
-                alertBox.innerHTML = '<div class="alert alert-success">Account created! Redirecting to login...</div>';
-                setTimeout(() => window.location.href = '/login/', 1500);
+                alertBox.innerHTML = `
+                    <div class="alert alert-success">
+                        ✅ ${data.message}
+                        <br><small>Check your spam folder if you don't see it.</small>
+                    </div>`;
             } else {
                 const errors = Object.values(data).flat().join(' ');
                 alertBox.innerHTML = `<div class="alert alert-error">${errors}</div>`;

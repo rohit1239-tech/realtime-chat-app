@@ -1,132 +1,260 @@
 {% extends 'base.html' %}
-{% block title %}Chats — ChatApp{% endblock %}
+{% block title %}ChatApp{% endblock %}
 
 {% block extra_css %}
 <style>
-    .app-container { display: flex; height: 100vh; overflow: hidden; }
-    .sidebar {
-        width: 320px;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0f0f1a; }
+    .app { display: flex; height: 100vh; overflow: hidden; }
+
+    /* LEFT PANEL */
+    .left-panel {
+        width: 380px; min-width: 380px;
         background: #1a1a2e;
         border-right: 1px solid #2a2a3d;
-        display: flex;
-        flex-direction: column;
+        display: flex; flex-direction: column;
     }
-    .sidebar-header {
-        padding: 20px;
-        border-bottom: 1px solid #2a2a3d;
+    .left-header {
+        padding: 14px 16px;
+        background: #16213e;
         display: flex;
         justify-content: space-between;
         align-items: center;
-    }
-    .sidebar-header h2 { font-size: 20px; color: #6c63ff; }
-    .user-info {
-        font-size: 13px;
-        color: #888;
-        padding: 12px 20px;
         border-bottom: 1px solid #2a2a3d;
     }
-    .user-info span { color: #6c63ff; font-weight: 600; }
-    .create-room {
-        padding: 16px 20px;
-        border-bottom: 1px solid #2a2a3d;
-        display: flex;
-        gap: 8px;
+    .left-header-left { display: flex; align-items: center; gap: 10px; }
+    .avatar {
+        width: 38px; height: 38px;
+        border-radius: 50%;
+        background: #6c63ff;
+        display: flex; align-items: center;
+        justify-content: center;
+        font-weight: 700; font-size: 16px;
+        color: white; flex-shrink: 0;
     }
-    .create-room input { flex: 1; }
+    .username-display { font-size: 15px; font-weight: 600; }
+    .header-icons { display: flex; gap: 8px; }
+    .icon-btn {
+        width: 34px; height: 34px;
+        border-radius: 50%;
+        background: transparent;
+        border: none; cursor: pointer;
+        color: #888; font-size: 16px;
+        display: flex; align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+    }
+    .icon-btn:hover { background: #2a2a3d; color: white; }
+
+    /* SEARCH */
+    .search-box {
+        padding: 8px 12px;
+        background: #1a1a2e;
+        border-bottom: 1px solid #2a2a3d;
+    }
+    .search-box input {
+        background: #0f0f1a;
+        border: none;
+        border-radius: 20px;
+        padding: 8px 16px;
+        font-size: 14px;
+        color: #e0e0e0;
+        width: 100%;
+    }
+    .search-box input:focus { outline: none; }
+    #user-search-results {
+        margin-top: 4px;
+        background: #0f0f1a;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .user-result {
+        display: flex; align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        cursor: pointer;
+        border-bottom: 1px solid #1a1a2e;
+        transition: background 0.15s;
+    }
+    .user-result:hover { background: #1a1a2e; }
+
+    /* TABS */
     .tabs {
         display: flex;
+        background: #16213e;
         border-bottom: 1px solid #2a2a3d;
     }
     .tab {
-        flex: 1;
-        padding: 10px;
-        text-align: center;
-        font-size: 13px;
-        cursor: pointer;
-        color: #888;
+        flex: 1; padding: 10px;
+        text-align: center; font-size: 13px;
+        cursor: pointer; color: #888;
         border-bottom: 2px solid transparent;
         transition: all 0.2s;
     }
-    .tab.active {
-        color: #6c63ff;
-        border-bottom: 2px solid #6c63ff;
-    }
-    .rooms-list { flex: 1; overflow-y: auto; padding: 8px 0; }
-    .room-item {
-        padding: 14px 20px;
+    .tab.active { color: #6c63ff; border-bottom: 2px solid #6c63ff; }
+
+    /* CHAT LIST */
+    .chat-list { flex: 1; overflow-y: auto; }
+    .chat-item {
+        display: flex; align-items: center;
+        padding: 12px 16px; gap: 12px;
         cursor: pointer;
-        transition: background 0.2s;
         border-bottom: 1px solid #1f1f35;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+        transition: background 0.15s;
+        position: relative;
     }
-    .room-item:hover { background: #2a2a3d; }
-    .room-info { flex: 1; }
-    .room-name { font-weight: 600; font-size: 15px; }
-    .room-last-msg { font-size: 12px; color: #888; margin-top: 4px; }
-    .room-meta { font-size: 11px; color: #666; margin-top: 2px; }
-    .join-btn {
-        padding: 5px 12px;
-        font-size: 12px;
-        background: #6c63ff30;
-        color: #6c63ff;
-        border: 1px solid #6c63ff;
-        border-radius: 6px;
-        cursor: pointer;
-        white-space: nowrap;
-    }
-    .join-btn:hover { background: #6c63ff; color: white; }
-    .open-btn {
-        padding: 5px 12px;
-        font-size: 12px;
+    .chat-item:hover { background: #2a2a3d; }
+    .chat-item:active { background: #2a2a3d; }
+    .chat-avatar {
+        width: 48px; height: 48px;
+        border-radius: 50%;
         background: #6c63ff;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
+        display: flex; align-items: center;
+        justify-content: center;
+        font-weight: 700; font-size: 18px;
+        color: white; flex-shrink: 0;
     }
-    .main-content {
+    .chat-info { flex: 1; min-width: 0; }
+    .chat-name {
+        font-size: 15px; font-weight: 600;
+        white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .chat-preview {
+        font-size: 13px; color: #888;
+        margin-top: 2px;
+        white-space: nowrap; overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .chat-meta {
+        display: flex; flex-direction: column;
+        align-items: flex-end; gap: 4px;
+        flex-shrink: 0;
+    }
+    .chat-time { font-size: 11px; color: #888; }
+    .unread-badge {
+        background: #2ed573; color: #0f0f1a;
+        border-radius: 50%; width: 20px; height: 20px;
+        display: flex; align-items: center;
+        justify-content: center; font-size: 11px;
+        font-weight: 700;
+    }
+
+    /* FAB button */
+    .fab {
+        position: absolute; bottom: 20px; right: 20px;
+        width: 52px; height: 52px;
+        border-radius: 50%; background: #6c63ff;
+        border: none; cursor: pointer;
+        font-size: 24px; color: white;
+        display: flex; align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(108,99,255,0.4);
+        transition: transform 0.2s;
+        z-index: 10;
+    }
+    .fab:hover { transform: scale(1.1); }
+
+    /* RIGHT PANEL */
+    .right-panel {
         flex: 1;
-        display: flex;
+        display: flex; align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 16px; color: #888;
+        background: #0f0f1a;
+        position: relative;
+    }
+    .right-panel-logo { font-size: 64px; opacity: 0.3; }
+    .right-panel h3 { font-size: 22px; color: #6c63ff; opacity: 0.7; }
+    .right-panel p { font-size: 14px; opacity: 0.5; }
+
+    /* NEW ROOM MODAL */
+    .modal-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 100;
         align-items: center;
         justify-content: center;
-        color: #888;
-        flex-direction: column;
-        gap: 12px;
     }
-    .main-content h3 { font-size: 24px; color: #6c63ff; }
-    .logout-btn { padding: 6px 14px; font-size: 12px; }
-    .empty-msg { padding: 20px; color: #888; font-size: 14px; text-align: center; }
+    .modal-overlay.show { display: flex; }
+    .modal {
+        background: #1a1a2e;
+        border: 1px solid #2a2a3d;
+        border-radius: 16px;
+        padding: 28px;
+        width: 360px;
+    }
+    .modal h3 { font-size: 18px; margin-bottom: 20px; }
+    .modal input { margin-bottom: 12px; }
+    .modal-btns { display: flex; gap: 8px; margin-top: 8px; }
+
+    .empty-msg {
+        text-align: center; color: #888;
+        padding: 40px 20px; font-size: 14px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="app-container">
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <h2>💬 ChatApp</h2>
-            <button class="btn btn-danger logout-btn" onclick="logout()">Logout</button>
+<div class="app">
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+        <div class="left-header">
+            <div class="left-header-left">
+                <div class="avatar" id="my-avatar"></div>
+                <span class="username-display" id="current-user"></span>
+            </div>
+            <div class="header-icons">
+                <button class="icon-btn" onclick="window.location.href='/admin-panel/'" title="Admin Panel">🛡️</button>
+                <button class="icon-btn" onclick="showNewRoomModal()" title="New Room">✏️</button>
+                <button class="icon-btn" onclick="logout()" title="Logout">🚪</button>
+            </div>
         </div>
-        <div class="user-info">
-            Logged in as <span id="current-user"></span>
+
+        <div class="search-box">
+            <input
+                type="text"
+                id="search-input"
+                placeholder="🔍 Search or start new chat"
+                oninput="searchUsers(this.value)"
+            >
+            <div id="user-search-results"></div>
         </div>
-        <div class="create-room">
-            <input type="text" id="room-name-input" placeholder="New room name...">
-            <button class="btn btn-primary" onclick="createRoom()">+</button>
-        </div>
+
         <div class="tabs">
-            <div class="tab active" id="tab-my" onclick="switchTab('my')">My Rooms</div>
+            <div class="tab active" id="tab-chats" onclick="switchTab('chats')">Chats</div>
             <div class="tab" id="tab-all" onclick="switchTab('all')">All Rooms</div>
         </div>
-        <div class="rooms-list" id="rooms-list">
-            <div class="empty-msg">Loading...</div>
+
+        <div class="chat-list" id="chat-list">
+            <div class="empty-msg">Loading chats...</div>
         </div>
     </div>
-    <div class="main-content">
-        <h3>Welcome to ChatApp!</h3>
-        <p>Select a room from the left or join a new one.</p>
-        <p style="font-size:13px;color:#666;">Switch to "All Rooms" to discover and join rooms.</p>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+        <div class="right-panel-logo">💬</div>
+        <h3>ChatApp</h3>
+        <p>Select a chat to start messaging</p>
+        <p style="font-size:12px;opacity:0.4">End-to-end encrypted · Real-time</p>
+    </div>
+</div>
+
+<!-- NEW ROOM MODAL -->
+<div class="modal-overlay" id="new-room-modal">
+    <div class="modal">
+        <h3>✏️ Create New Room</h3>
+        <input type="text" id="room-name-input" placeholder="Room name...">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <input type="checkbox" id="requires-approval" checked style="width:auto">
+            <label style="font-size:14px;color:#aaa">Require approval to join</label>
+        </div>
+        <div class="modal-btns">
+            <button class="btn btn-primary" style="flex:1" onclick="createRoom()">Create</button>
+            <button class="btn" style="flex:1;background:#2a2a3d;color:#888" onclick="hideNewRoomModal()">Cancel</button>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -138,50 +266,76 @@
     if (!token) window.location.href = '/login/';
 
     document.getElementById('current-user').textContent = username;
+    document.getElementById('my-avatar').textContent = username ? username[0].toUpperCase() : '?';
 
-    let currentTab = 'my';
+    let currentTab = 'chats';
     let myRoomNames = new Set();
 
+    // Random colors for room avatars
+    const colors = ['#6c63ff','#ff6584','#43b89c','#f9a825','#e91e63','#2196f3'];
+    function getColor(str) {
+        let hash = 0;
+        for (let c of str) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+        return colors[Math.abs(hash) % colors.length];
+    }
+
     async function fetchMyRooms() {
-        const response = await fetch('/api/rooms/', {
+        const res = await fetch('/api/rooms/', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (response.status === 401) { window.location.href = '/login/'; return []; }
-        return await response.json();
+        if (res.status === 401) { window.location.href = '/login/'; return []; }
+        return await res.json();
     }
 
     async function fetchAllRooms() {
-        const response = await fetch('/api/all-rooms/', {
+        const res = await fetch('/api/all-rooms/', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (response.status === 401) { window.location.href = '/login/'; return []; }
-        return await response.json();
+        if (res.status === 401) { window.location.href = '/login/'; return []; }
+        return await res.json();
     }
 
-    async function loadRooms() {
-        const list = document.getElementById('rooms-list');
+    async function loadChats() {
+        const list = document.getElementById('chat-list');
         list.innerHTML = '<div class="empty-msg">Loading...</div>';
 
-        if (currentTab === 'my') {
+        if (currentTab === 'chats') {
             const rooms = await fetchMyRooms();
             myRoomNames = new Set(rooms.map(r => r.name));
 
             if (rooms.length === 0) {
-                list.innerHTML = '<div class="empty-msg">No rooms yet. Create one or join from All Rooms!</div>';
+                list.innerHTML = `
+                    <div class="empty-msg">
+                        No chats yet!<br>
+                        <span style="font-size:13px">Tap ✏️ to create a room or<br>search for users to message</span>
+                    </div>`;
                 return;
             }
+
             list.innerHTML = rooms.map(room => `
-                <div class="room-item">
-                    <div class="room-info" onclick="openRoom('${room.name}')">
-                        <div class="room-name"># ${room.name}</div>
-                        <div class="room-last-msg">
+                <div class="chat-item" onclick="openRoom('${room.name}')">
+                    <div class="chat-avatar" style="background:${getColor(room.name)}">
+                        ${room.name[0].toUpperCase()}
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name"># ${room.name}</div>
+                        <div class="chat-preview">
                             ${room.last_message
-                                ? room.last_message.sender + ': ' + room.last_message.content.substring(0, 35)
+                                ? (room.last_message.sender === username ? 'You: ' : room.last_message.sender + ': ')
+                                  + room.last_message.content.substring(0, 35)
                                 : 'No messages yet'}
                         </div>
-                        <div class="room-meta">${room.member_count} members</div>
                     </div>
-                    <button class="open-btn" onclick="openRoom('${room.name}')">Open</button>
+                    <div class="chat-meta">
+                        <div class="chat-time">
+                            ${room.last_message
+                                ? new Date(room.last_message.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+                                : ''}
+                        </div>
+                        <div class="chat-preview" style="font-size:11px">
+                            ${room.member_count} members
+                        </div>
+                    </div>
                 </div>
             `).join('');
 
@@ -194,53 +348,72 @@
             list.innerHTML = rooms.map(room => {
                 const isMember = myRoomNames.has(room.name);
                 return `
-                <div class="room-item">
-                    <div class="room-info">
-                        <div class="room-name"># ${room.name}</div>
-                        <div class="room-meta">${room.member_count} members · by ${room.created_by.username}</div>
+                <div class="chat-item">
+                    <div class="chat-avatar" style="background:${getColor(room.name)}">
+                        ${room.name[0].toUpperCase()}
                     </div>
-                    ${isMember
-                        ? `<button class="open-btn" onclick="openRoom('${room.name}')">Open</button>`
-                        : `<button class="join-btn" onclick="joinRoom(${room.id}, '${room.name}')">Join</button>`
-                    }
-                </div>
-            `}).join('');
+                    <div class="chat-info">
+                        <div class="chat-name"># ${room.name}</div>
+                        <div class="chat-preview">
+                            by ${room.created_by.username} · ${room.member_count} members
+                            ${room.requires_approval ? ' · 🔒' : ''}
+                        </div>
+                    </div>
+                    <div class="chat-meta">
+                        ${isMember
+                            ? `<button class="btn" style="padding:5px 12px;font-size:12px;background:#6c63ff;color:white;border:none;border-radius:6px;cursor:pointer"
+                                onclick="openRoom('${room.name}')">Open</button>`
+                            : `<button class="btn" style="padding:5px 12px;font-size:12px;background:transparent;color:#6c63ff;border:1px solid #6c63ff;border-radius:6px;cursor:pointer"
+                                onclick="joinRoom(${room.id},'${room.name}',${room.requires_approval})">
+                                ${room.requires_approval ? 'Request' : 'Join'}
+                               </button>`
+                        }
+                    </div>
+                </div>`;
+            }).join('');
         }
     }
 
     async function createRoom() {
-        const name = document.getElementById('room-name-input').value.trim();
+        const input = document.getElementById('room-name-input');
+        const name = input.value.trim().replace(/\s+/g, '-').toLowerCase();
+        const requiresApproval = document.getElementById('requires-approval').checked;
         if (!name) return;
 
-        const response = await fetch('/api/rooms/', {
+        const res = await fetch('/api/rooms/', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ name, room_type: 'group' })
+            body: JSON.stringify({
+                name,
+                room_type: 'group',
+                requires_approval: requiresApproval
+            })
         });
 
-        if (response.ok) {
-            document.getElementById('room-name-input').value = '';
-            currentTab = 'my';
-            switchTab('my');
+        if (res.ok) {
+            input.value = '';
+            hideNewRoomModal();
+            switchTab('chats');
         } else {
-            const data = await response.json();
+            const data = await res.json();
             alert(JSON.stringify(data));
         }
     }
 
-    async function joinRoom(roomId, roomName) {
-        const response = await fetch(`/api/rooms/${roomId}/join/`, {
+    async function joinRoom(roomId, roomName, requiresApproval) {
+        const url = requiresApproval
+            ? `/api/rooms/${roomId}/request-join/`
+            : `/api/rooms/${roomId}/join/`;
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (response.ok) {
-            myRoomNames.add(roomName);
-            loadRooms();
-            alert(`Joined #${roomName}! Click Open to start chatting.`);
-        }
+        const data = await res.json();
+        alert(data.message);
+        loadChats();
     }
 
     function openRoom(roomName) {
@@ -249,16 +422,65 @@
 
     function switchTab(tab) {
         currentTab = tab;
-        document.getElementById('tab-my').className = `tab ${tab === 'my' ? 'active' : ''}`;
+        document.getElementById('tab-chats').className = `tab ${tab === 'chats' ? 'active' : ''}`;
         document.getElementById('tab-all').className = `tab ${tab === 'all' ? 'active' : ''}`;
-        loadRooms();
+        loadChats();
     }
+
+    async function searchUsers(query) {
+        const resultsDiv = document.getElementById('user-search-results');
+        if (!query.trim()) { resultsDiv.innerHTML = ''; return; }
+
+        const res = await fetch(`/api/users/search/?q=${query}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const users = await res.json();
+
+        if (users.length === 0) {
+            resultsDiv.innerHTML = '<div style="padding:10px;font-size:13px;color:#888">No users found</div>';
+            return;
+        }
+
+        resultsDiv.innerHTML = users.map(u => `
+            <div class="user-result" onclick="window.location.href='/dm/${u.username}/'">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:36px;height:36px;border-radius:50%;background:${getColor(u.username)};
+                        display:flex;align-items:center;justify-content:center;
+                        font-weight:700;color:white">
+                        ${u.username[0].toUpperCase()}
+                    </div>
+                    <div>
+                        <div style="font-size:14px;font-weight:500">${u.username}</div>
+                        <div style="font-size:12px;color:${u.is_online ? '#2ed573' : '#888'}">
+                            ${u.is_online ? '● Online' : '○ Offline'}
+                        </div>
+                    </div>
+                </div>
+                <div style="font-size:12px;color:#6c63ff">Message →</div>
+            </div>
+        `).join('');
+    }
+
+    function showNewRoomModal() {
+        document.getElementById('new-room-modal').classList.add('show');
+    }
+
+    function hideNewRoomModal() {
+        document.getElementById('new-room-modal').classList.remove('show');
+    }
+
+    // Close modal on overlay click
+    document.getElementById('new-room-modal').addEventListener('click', function(e) {
+        if (e.target === this) hideNewRoomModal();
+    });
 
     function logout() {
         localStorage.clear();
         window.location.href = '/login/';
     }
 
-    loadRooms();
+    loadChats();
+    // Refresh chat list every 10 seconds
+    setInterval(loadChats, 10000);
 </script>
 {% endblock %}

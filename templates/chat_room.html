@@ -209,19 +209,24 @@
             document.getElementById('conn-status').className = 'connection-status connected';
         };
 
+
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
             if (data.type === 'message') {
-                // Skip if it's our own message (already shown locally)
-                if (data.sender === username) return;
-                addMessage(data.sender, data.message, data.timestamp, true);
-                scrollToBottom();
+                // Only show messages from OTHERS
+                // Your own messages are already shown in sendMessage()
+                if (data.sender !== username) {
+                    addMessage(data.sender, data.message, data.timestamp, true);
+                    scrollToBottom();
+                }
             } else if (data.type === 'status') {
                 addSystemMessage(`${data.user} is now ${data.status}`);
                 updateMemberStatus(data.user, data.status === 'online');
             }
         };
+
+
         socket.onclose = () => {
             document.getElementById('conn-status').textContent = '● Disconnected';
             document.getElementById('conn-status').className = 'connection-status';
@@ -272,18 +277,18 @@
         const content = input.value.trim();
         if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
 
+        // Show MY message immediately on MY screen
+        addMessage(username, content, new Date().toISOString(), true);
+        scrollToBottom();
+
+        // Send to server
         socket.send(JSON.stringify({
             type: 'message',
             content: content
         }));
 
-        // Show your own message immediately without waiting for broadcast
-        addMessage(username, content, new Date().toISOString(), true);
-        scrollToBottom();
-
         input.value = '';
     }
-
     function handleKeyPress(e) {
         if (e.key === 'Enter') sendMessage();
     }

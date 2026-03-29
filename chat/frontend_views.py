@@ -14,3 +14,9 @@ def chat_home(request):
 
 def chat_room(request, room_name):
     return render(request, 'chat_room.html', {'room_name': room_name})
+
+def dm_page(request, username):
+    return render(request, 'dm.html', {'other_username': username})
+
+def admin_panel(request):
+    return render(request, 'admin_panel.html')
