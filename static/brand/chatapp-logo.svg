@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">ChatApp Logo</title>
+  <desc id="desc">Gradient C-shaped chat bubble favicon</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#07111f"/>
+      <stop offset="100%" stop-color="#0d1b2a"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="10%" y1="15%" x2="88%" y2="85%">
+      <stop offset="0%" stop-color="#24e4ea"/>
+      <stop offset="52%" stop-color="#2f7cff"/>
+      <stop offset="100%" stop-color="#d300ff"/>
+    </linearGradient>
+    <linearGradient id="tail" x1="28%" y1="20%" x2="82%" y2="92%">
+      <stop offset="0%" stop-color="#ff74f9"/>
+      <stop offset="100%" stop-color="#a200ff"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+
+  <path
+    d="M180 48
+       C128 24 67 47 42 97
+       C16 149 33 212 91 226
+       C118 232 149 228 171 214"
+    fill="none"
+    stroke="url(#stroke)"
+    stroke-linecap="round"
+    stroke-width="42"
+    filter="url(#glow)"
+  />
+
+  <path
+    d="M164 177
+       C181 175 202 183 214 199
+       C205 200 196 205 190 214
+       C177 205 167 192 164 177 Z"
+    fill="url(#tail)"
+  />
+
+  <circle cx="197" cy="66" r="16" fill="#d95cff" opacity="0.5"/>
+</svg>
