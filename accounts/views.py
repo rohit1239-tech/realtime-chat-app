@@ -1,14 +1,60 @@
+import random
+from datetime import timedelta
+
+from django.conf import settings
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
-from django.conf import settings
-from .serializers import RegisterSerializer, UserProfileSerializer
+from django.utils import timezone
+from rest_framework.parsers import FormParser, MultiPartParser
+from chat.models import UserProfile
+
+from .models import EmailOTP
+from .serializers import (
+    EmailOTPTokenObtainPairSerializer,
+    ProfilePictureSerializer,
+    RegisterSerializer,
+    ResendEmailOTPSerializer,
+    UserProfileSerializer,
+    VerifyEmailOTPSerializer,
+)
+
+
+OTP_EXPIRY_MINUTES = 10
+
+
+def send_email_verification_otp(user):
+    EmailOTP.objects.filter(
+        user=user,
+        purpose=EmailOTP.PURPOSE_EMAIL_VERIFICATION,
+        is_used=False,
+    ).update(is_used=True)
+
+    otp_code = f"{random.randint(100000, 999999)}"
+    expires_at = timezone.now() + timedelta(minutes=OTP_EXPIRY_MINUTES)
+    EmailOTP.objects.create(
+        user=user,
+        purpose=EmailOTP.PURPOSE_EMAIL_VERIFICATION,
+        code=otp_code,
+        expires_at=expires_at,
+    )
+
+    send_mail(
+        subject='Your ChatApp verification OTP',
+        message=(
+            f"Hi {user.username}!\n\n"
+            f"Your ChatApp email verification OTP is: {otp_code}\n\n"
+            f"This OTP expires in {OTP_EXPIRY_MINUTES} minutes.\n"
+            "If you didn't create this account, you can ignore this email."
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
 
 
 class RegisterView(generics.CreateAPIView):
@@ -20,57 +66,93 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-
-        # Send verification email
-        token = default_token_generator.make_token(user)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        verify_url = f"http://127.0.0.1:8000/api/auth/verify-email/{uid}/{token}/"
-
-        send_mail(
-            subject='Verify your ChatApp email',
-            message=f'''Hi {user.username}!
-
-Welcome to ChatApp! Please verify your email by clicking the link below:
-
-{verify_url}
-
-This link expires in 24 hours.
-
-If you didn't create this account, ignore this email.''',
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
+        send_email_verification_otp(user)
 
         return Response({
-            "message": "Account created! Please check your email to verify your account."
+            "message": "Account created. We've sent a 6-digit OTP to your email.",
+            "email": user.email,
         }, status=status.HTTP_201_CREATED)
 
 
-class VerifyEmailView(APIView):
+class VerifyEmailOTPView(APIView):
     permission_classes = (permissions.AllowAny,)
 
-    def get(self, request, uidb64, token):
+    def post(self, request):
+        serializer = VerifyEmailOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email'].strip().lower()
+        otp = serializer.validated_data['otp'].strip()
+
         try:
-            uid = force_str(urlsafe_base64_decode(uidb64))
-            user = User.objects.get(pk=uid)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
             return Response(
-                {"error": "Invalid verification link."},
+                {"error": "Invalid email or OTP."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if default_token_generator.check_token(user, token):
-            user.is_active = True
-            user.save()
+        otp_record = EmailOTP.objects.filter(
+            user=user,
+            purpose=EmailOTP.PURPOSE_EMAIL_VERIFICATION,
+            code=otp,
+            is_used=False,
+        ).first()
+
+        if not otp_record:
             return Response(
-                {"message": "Email verified successfully! You can now login."},
+                {"error": "Invalid email or OTP."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if otp_record.expires_at < timezone.now():
+            return Response(
+                {"error": "OTP expired. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        otp_record.is_used = True
+        otp_record.save(update_fields=['is_used'])
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+
+        return Response(
+            {"message": "Email verified successfully! You can now login."},
+            status=status.HTTP_200_OK
+        )
+
+
+class ResendEmailOTPView(APIView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request):
+        serializer = ResendEmailOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email'].strip().lower()
+        user = User.objects.filter(email__iexact=email).first()
+
+        if not user:
+            return Response(
+                {"error": "No account found for this email."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if user.is_active:
+            return Response(
+                {"message": "This email is already verified. You can login now."},
                 status=status.HTTP_200_OK
             )
+
+        send_email_verification_otp(user)
         return Response(
-            {"error": "Verification link is invalid or expired."},
-            status=status.HTTP_400_BAD_REQUEST
+            {"message": "A new OTP has been sent to your email."},
+            status=status.HTTP_200_OK
         )
+
+
+class LoginView(TokenObtainPairView):
+    serializer_class = EmailOTPTokenObtainPairSerializer
 
 
 class LogoutView(APIView):
@@ -91,7 +173,19 @@ class LogoutView(APIView):
 
 class ProfileView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
+    parser_classes = (MultiPartParser, FormParser)
 
     def get(self, request):
-        serializer = UserProfileSerializer(request.user)
+        serializer = UserProfileSerializer(request.user, context={'request': request})
         return Response(serializer.data)
+
+    def patch(self, request):
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        serializer = ProfilePictureSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        response_serializer = UserProfileSerializer(
+            request.user,
+            context={'request': request},
+        )
+        return Response(response_serializer.data, status=status.HTTP_200_OK)

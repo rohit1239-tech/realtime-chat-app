@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from chat.models import UserProfile
 import re
 
 
@@ -37,6 +40,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("This username is already taken.")
         return value
+
+    def validate_email(self, value):
+        email = value.strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError("This email is already registered.")
+        return email
 
     def validate_password(self, value):
         # Minimum 8 characters
@@ -81,7 +90,55 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+class VerifyEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=6, max_length=6)
+
+
+class ResendEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class EmailOTPTokenObtainPairSerializer(TokenObtainPairSerializer):
+    default_error_messages = {
+        'no_active_account': 'Invalid username or password.',
+        'email_not_verified': 'Email not verified. Please verify your account with the OTP sent to your email.',
+    }
+
+    def validate(self, attrs):
+        username = attrs.get(self.username_field)
+        user = User.objects.filter(username=username).first()
+
+        if user and not user.is_active:
+            raise AuthenticationFailed(
+                self.error_messages['email_not_verified'],
+                code='email_not_verified',
+            )
+
+        return super().validate(attrs)
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
+    profile_picture_url = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'date_joined')
+        fields = ('id', 'username', 'email', 'date_joined', 'profile_picture_url')
+
+    def get_profile_picture_url(self, obj):
+        try:
+            request = self.context.get('request')
+            profile_picture = obj.profile.profile_picture
+            if not profile_picture:
+                return None
+            if request:
+                return request.build_absolute_uri(profile_picture.url)
+            return profile_picture.url
+        except UserProfile.DoesNotExist:
+            return None
+
+
+class ProfilePictureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ('profile_picture',)

@@ -12,18 +12,15 @@
         flex-direction: column;
     }
     .sidebar-header {
-        padding: 20px;
+        padding: 14px 20px;
         border-bottom: 1px solid #2a2a3d;
     }
-    .sidebar-header h2 { font-size: 18px; color: #6c63ff; }
-    .back-btn {
-        font-size: 13px;
+    .sidebar-header h2 {
+        font-size: 12px;
         color: #888;
-        cursor: pointer;
-        margin-bottom: 8px;
-        display: inline-block;
+        font-weight: 500;
+        letter-spacing: 0.08em;
     }
-    .back-btn:hover { color: #6c63ff; }
     .members-list { padding: 12px 0; flex: 1; overflow-y: auto; }
     .member-item {
         padding: 8px 20px;
@@ -31,6 +28,34 @@
         align-items: center;
         gap: 8px;
         font-size: 14px;
+        position: relative;
+    }
+    .member-item.clickable {
+        cursor: pointer;
+        transition: background 0.2s ease;
+    }
+    .member-item.clickable:hover {
+        background: rgba(255,255,255,0.04);
+    }
+    .member-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(135deg, var(--accent), #3ba7d6);
+        color: #042133;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 800;
+        flex-shrink: 0;
+    }
+    .member-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
     }
     .status-dot {
         width: 8px; height: 8px;
@@ -79,6 +104,38 @@
         font-size: 14px;
         line-height: 1.5;
     }
+    .message-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+    }
+    .message-row.mine {
+        justify-content: flex-end;
+    }
+    .message-row.theirs {
+        justify-content: flex-start;
+    }
+    .message-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(135deg, var(--accent), #3ba7d6);
+        color: #042133;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 800;
+        flex-shrink: 0;
+        box-shadow: 0 8px 18px rgba(78, 205, 196, 0.16);
+    }
+    .message-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
     .message-bubble.received {
         background: #2a2a3d;
         align-self: flex-start;
@@ -101,6 +158,32 @@
         margin-top: 4px;
         text-align: right;
     }
+    .message-content {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .message-attachment {
+        margin-top: 8px;
+    }
+    .message-attachment img {
+        max-width: 240px;
+        max-height: 220px;
+        width: auto;
+        border-radius: 12px;
+        display: block;
+    }
+    .attachment-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #eef6ff;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+    }
     .system-message {
         text-align: center;
         font-size: 12px;
@@ -116,6 +199,71 @@
         align-items: center;
     }
     .chat-input-area input { flex: 1; }
+    .attach-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 1px solid #2a2a3d;
+        background: rgba(255,255,255,0.04);
+        color: var(--text-1);
+        font-size: 18px;
+        cursor: pointer;
+    }
+    .attachment-chip {
+        margin: 10px 24px 0;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid #2a2a3d;
+        font-size: 13px;
+    }
+    .attachment-chip.show {
+        display: flex;
+    }
+    .attachment-chip button {
+        border: none;
+        background: transparent;
+        color: #ff8b8b;
+        cursor: pointer;
+        font-weight: 700;
+    }
+    .member-action-menu {
+        position: fixed;
+        min-width: 180px;
+        background: rgba(10, 22, 35, 0.98);
+        border: 1px solid var(--border-strong);
+        border-radius: 16px;
+        box-shadow: var(--shadow-soft);
+        padding: 8px;
+        display: none;
+        z-index: 120;
+    }
+    .member-action-menu.show {
+        display: block;
+    }
+    .member-action-name {
+        font-size: 13px;
+        color: var(--text-3);
+        padding: 6px 10px 8px;
+    }
+    .member-action-menu button {
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--text-1);
+        text-align: left;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    .member-action-menu button:hover {
+        background: rgba(255,255,255,0.06);
+    }
 </style>
 {% endblock %}
 
@@ -123,11 +271,7 @@
 <div class="app-container">
     <div class="sidebar">
         <div class="sidebar-header">
-            <span class="back-btn" onclick="window.location.href='/chat/'">← Back</span>
-            <h2># {{ room_name }}</h2>
-        </div>
-        <div style="padding:12px 20px;font-size:12px;color:#888;border-bottom:1px solid #2a2a3d;">
-            MEMBERS
+            <h2>MEMBERS</h2>
         </div>
         <div class="members-list" id="members-list"></div>
     </div>
@@ -140,7 +284,13 @@
 
         <div class="messages-container" id="messages-container"></div>
 
+        <div class="attachment-chip" id="attachment-chip">
+            <span id="attachment-name"></span>
+            <button type="button" onclick="clearSelectedAttachment()">Remove</button>
+        </div>
+
         <div class="chat-input-area">
+            <button class="attach-btn" type="button" onclick="pickAttachment()" title="Attach file">+</button>
             <input
                 type="text"
                 id="message-input"
@@ -151,15 +301,22 @@
         </div>
     </div>
 </div>
+<input type="file" id="attachment-input" style="display:none" onchange="handleAttachmentSelect(event)">
+<div class="member-action-menu" id="member-action-menu">
+    <div class="member-action-name" id="member-action-name"></div>
+    <button type="button" onclick="messageSelectedMember()">Message</button>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    const token = localStorage.getItem('access_token');
+    let token = localStorage.getItem('access_token');
     const username = localStorage.getItem('username');
     const roomName = '{{ room_name }}';
-
-    if (!token) window.location.href = '/login/';
+    const profilePictures = {};
+    let currentRoomId = null;
+    let selectedAttachment = null;
+    let selectedMemberUsername = null;
 
     let socket = null;
     const onlineUsers = new Set();
@@ -174,26 +331,59 @@
             const room = rooms.find(r => r.name === roomName);
 
             if (!room) return;
+            currentRoomId = room.id;
 
-            // Load members
-            renderMembers(room.members);
+            const detailResponse = await fetch(`/api/rooms/${room.id}/`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (detailResponse.ok) {
+                const roomDetail = await detailResponse.json();
+                renderMembers(roomDetail.members || []);
+            }
 
             // Load message history
             const msgResponse = await fetch(`/api/rooms/${room.id}/messages/`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const messages = await msgResponse.json();
-            messages.forEach(msg => addMessage(msg.sender.username, msg.content, msg.timestamp, false));
+            messages.forEach(msg => {
+                profilePictures[msg.sender.username] = msg.sender.profile_picture_url || null;
+                addMessage(msg);
+            });
             scrollToBottom();
         } catch (err) {
             console.error('Error loading messages:', err);
         }
     }
 
+    async function loadCurrentUserProfile() {
+        try {
+            const response = await fetch('/api/auth/profile/', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!response.ok) return;
+            const profile = await response.json();
+            profilePictures[username] = profile.profile_picture_url || null;
+        } catch (err) {
+            console.error('Error loading current user profile:', err);
+        }
+    }
+
+    function renderAvatar(usernameValue, profilePictureUrl, className) {
+        if (profilePictureUrl) {
+            return `<div class="${className}"><img src="${profilePictureUrl}" alt="${usernameValue}"></div>`;
+        }
+        return `<div class="${className}">${usernameValue[0].toUpperCase()}</div>`;
+    }
+
     function renderMembers(members) {
         const list = document.getElementById('members-list');
+        members.forEach(member => {
+            profilePictures[member.username] = member.profile_picture_url || null;
+        });
         list.innerHTML = members.map(m => `
-            <div class="member-item" id="member-${m.username}">
+            <div class="member-item ${m.username !== username ? 'clickable' : ''}" id="member-${m.username}" ${m.username !== username ? `onclick="showMemberActions(event, '${m.username}')"` : ''}>
+                ${renderAvatar(m.username, m.profile_picture_url, 'member-avatar')}
                 <div class="status-dot ${m.is_online ? 'online' : ''}"></div>
                 <span>${m.username}</span>
             </div>
@@ -202,7 +392,11 @@
 
     // Connect WebSocket with JWT token in URL
     function connectWebSocket() {
-        socket = new WebSocket(`ws://127.0.0.1:8000/ws/chat/${roomName}/?token=${token}`);
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const encodedRoomName = encodeURIComponent(roomName);
+        socket = new WebSocket(
+            `${wsProtocol}://${window.location.host}/ws/chat/${encodedRoomName}/?token=${encodeURIComponent(token)}`
+        );
 
         socket.onopen = () => {
             document.getElementById('conn-status').textContent = '● Connected';
@@ -217,7 +411,17 @@
                 // Only show messages from OTHERS
                 // Your own messages are already shown in sendMessage()
                 if (data.sender !== username) {
-                    addMessage(data.sender, data.message, data.timestamp, true);
+                    addMessage(
+                        {
+                            sender: { username: data.sender },
+                            content: data.message,
+                            timestamp: data.timestamp,
+                            attachment_url: data.attachment_url,
+                            attachment_name: data.attachment_name,
+                            attachment_type: data.attachment_type,
+                            is_image: data.is_image,
+                        }
+                    );
                     scrollToBottom();
                 }
             } else if (data.type === 'status') {
@@ -227,9 +431,10 @@
         };
 
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
             document.getElementById('conn-status').textContent = '● Disconnected';
             document.getElementById('conn-status').className = 'connection-status';
+            console.error('WebSocket closed:', event.code, event.reason);
             // Reconnect after 3 seconds
             setTimeout(connectWebSocket, 3000);
         };
@@ -239,19 +444,46 @@
         };
     }
 
-    function addMessage(sender, content, timestamp, isNew) {
-        const container = document.getElementById('messages-container');
-        const isMine = sender === username;
-        const time = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-        const div = document.createElement('div');
-        div.className = `message-bubble ${isMine ? 'sent' : 'received'}`;
-        div.innerHTML = `
-            ${!isMine ? `<div class="message-sender">${sender}</div>` : ''}
-            <div>${content}</div>
-            <div class="message-time">${time}</div>
+    function renderAttachment(message) {
+        if (!message.attachment_url) return '';
+        if (message.is_image) {
+            return `
+                <div class="message-attachment">
+                    <a href="${message.attachment_url}" target="_blank" rel="noopener noreferrer">
+                        <img src="${message.attachment_url}" alt="${message.attachment_name || 'Image'}">
+                    </a>
+                </div>
+            `;
+        }
+        return `
+            <div class="message-attachment">
+                <a class="attachment-link" href="${message.attachment_url}" target="_blank" rel="noopener noreferrer">
+                    <span>📄</span>
+                    <span>${message.attachment_name || 'Download attachment'}</span>
+                </a>
+            </div>
         `;
-        container.appendChild(div);
+    }
+
+    function addMessage(message) {
+        const container = document.getElementById('messages-container');
+        const sender = message.sender.username;
+        const isMine = sender === username;
+        const profilePictureUrl = message.sender.profile_picture_url || profilePictures[sender] || null;
+        const time = new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        const row = document.createElement('div');
+        row.className = `message-row ${isMine ? 'mine' : 'theirs'}`;
+        row.innerHTML = `
+            ${!isMine ? renderAvatar(sender, profilePictureUrl, 'message-avatar') : ''}
+            <div class="message-bubble ${isMine ? 'sent' : 'received'}">
+                ${!isMine ? `<div class="message-sender">${sender}</div>` : ''}
+                ${message.content ? `<div class="message-content">${message.content}</div>` : ''}
+                ${renderAttachment(message)}
+                <div class="message-time">${time}</div>
+            </div>
+        `;
+        container.appendChild(row);
     }
 
     function addSystemMessage(text) {
@@ -272,13 +504,121 @@
         }
     }
 
-    function sendMessage() {
+    function showMemberActions(event, memberUsername) {
+        if (memberUsername === username) {
+            return;
+        }
+        event.stopPropagation();
+        selectedMemberUsername = memberUsername;
+        const menu = document.getElementById('member-action-menu');
+        document.getElementById('member-action-name').textContent = memberUsername;
+        menu.style.left = `${Math.min(event.clientX + 10, window.innerWidth - 210)}px`;
+        menu.style.top = `${Math.min(event.clientY + 10, window.innerHeight - 100)}px`;
+        menu.classList.add('show');
+    }
+
+    function hideMemberActions() {
+        document.getElementById('member-action-menu').classList.remove('show');
+    }
+
+    function messageSelectedMember() {
+        if (!selectedMemberUsername) return;
+        const targetUsername = selectedMemberUsername;
+        hideMemberActions();
+
+        try {
+            if (
+                window.parent &&
+                window.parent !== window &&
+                typeof window.parent.openDirectChat === 'function'
+            ) {
+                window.parent.openDirectChat(targetUsername);
+                return;
+            }
+        } catch (err) {
+            console.error('Could not access parent chat window:', err);
+        }
+
+        window.location.href = `/dm/${encodeURIComponent(targetUsername)}/`;
+    }
+
+    function pickAttachment() {
+        document.getElementById('attachment-input').click();
+    }
+
+    function handleAttachmentSelect(event) {
+        selectedAttachment = event.target.files[0] || null;
+        const chip = document.getElementById('attachment-chip');
+        const name = document.getElementById('attachment-name');
+        if (selectedAttachment) {
+            name.textContent = selectedAttachment.name;
+            chip.classList.add('show');
+        } else {
+            chip.classList.remove('show');
+        }
+    }
+
+    function clearSelectedAttachment() {
+        selectedAttachment = null;
+        document.getElementById('attachment-input').value = '';
+        document.getElementById('attachment-chip').classList.remove('show');
+    }
+
+    async function sendMessage() {
         const input = document.getElementById('message-input');
         const content = input.value.trim();
-        if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;
+        if (!content && !selectedAttachment) return;
+
+        if (selectedAttachment) {
+            if (!currentRoomId) return;
+
+            const formData = new FormData();
+            formData.append('content', content);
+            formData.append('attachment', selectedAttachment);
+
+            const response = await fetch(`/api/rooms/${currentRoomId}/messages/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+
+            if (!response.ok) {
+                alert('Could not send attachment.');
+                return;
+            }
+
+            const data = await response.json();
+            addMessage(data);
+            scrollToBottom();
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'broadcast_message',
+                    content: data.content,
+                    timestamp: data.timestamp,
+                    message_id: data.id,
+                    attachment_url: data.attachment_url,
+                    attachment_name: data.attachment_name,
+                    attachment_type: data.attachment_type,
+                    is_image: data.is_image
+                }));
+            }
+
+            input.value = '';
+            clearSelectedAttachment();
+            return;
+        }
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
 
         // Show MY message immediately on MY screen
-        addMessage(username, content, new Date().toISOString(), true);
+        addMessage({
+            sender: { username, profile_picture_url: profilePictures[username] || null },
+            content,
+            timestamp: new Date().toISOString(),
+            attachment_url: null,
+            is_image: false,
+        });
         scrollToBottom();
 
         // Send to server
@@ -298,8 +638,22 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    // Init
-    loadMessages();
-    connectWebSocket();
+    async function initializePage() {
+        token = await window.ensureAuthenticated();
+        if (!token) return;
+
+        await loadCurrentUserProfile();
+        loadMessages();
+        connectWebSocket();
+    }
+
+    document.addEventListener('click', function(event) {
+        const menu = document.getElementById('member-action-menu');
+        if (menu && !menu.contains(event.target)) {
+            hideMemberActions();
+        }
+    });
+
+    initializePage();
 </script>
 {% endblock %}

@@ -14,11 +14,31 @@
         align-items: center;
     }
     .chat-header h3 { font-size: 18px; }
-    .back-btn {
-        font-size: 13px; color: #888;
-        cursor: pointer; text-decoration: none;
+    .dm-user {
+        display: flex;
+        align-items: center;
+        gap: 12px;
     }
-    .back-btn:hover { color: #6c63ff; }
+    .dm-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: linear-gradient(135deg, var(--accent), #3ba7d6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #042133;
+        font-weight: 800;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+    .dm-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
     .messages-container {
         flex: 1; overflow-y: auto;
         padding: 20px 24px;
@@ -40,12 +60,69 @@
         font-size: 10px; color: #888;
         margin-top: 4px; text-align: right;
     }
+    .message-content {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .message-attachment {
+        margin-top: 8px;
+    }
+    .message-attachment img {
+        max-width: 240px;
+        max-height: 220px;
+        border-radius: 12px;
+        display: block;
+    }
+    .attachment-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        color: #eef6ff;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+    }
     .chat-input-area {
         padding: 16px 24px; background: #1a1a2e;
         border-top: 1px solid #2a2a3d;
         display: flex; gap: 12px; align-items: center;
     }
     .chat-input-area input { flex: 1; }
+    .attach-btn {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        border: 1px solid #2a2a3d;
+        background: rgba(255,255,255,0.04);
+        color: var(--text-1);
+        font-size: 18px;
+        cursor: pointer;
+    }
+    .attachment-chip {
+        margin: 10px 24px 0;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid #2a2a3d;
+        font-size: 13px;
+    }
+    .attachment-chip.show {
+        display: flex;
+    }
+    .attachment-chip button {
+        border: none;
+        background: transparent;
+        color: #ff8b8b;
+        cursor: pointer;
+        font-weight: 700;
+    }
     .online-badge {
         font-size: 12px; padding: 3px 10px;
         border-radius: 20px; background: #2ed57320; color: #2ed573;
@@ -61,9 +138,9 @@
 <div class="app-container">
     <div class="chat-area">
         <div class="chat-header">
-            <div style="display:flex;align-items:center;gap:12px">
-                <a href="/chat/" class="back-btn">← Back</a>
-                <h3 id="dm-title">💬 {{ other_username }}</h3>
+            <div class="dm-user">
+                <div class="dm-avatar" id="dm-avatar">{{ other_username|first|upper }}</div>
+                <h3 id="dm-title">{{ other_username }}</h3>
             </div>
             <span id="online-status" class="offline-badge">Offline</span>
         </div>
@@ -74,7 +151,13 @@
             </div>
         </div>
 
+        <div class="attachment-chip" id="attachment-chip">
+            <span id="attachment-name"></span>
+            <button type="button" onclick="clearSelectedAttachment()">Remove</button>
+        </div>
+
         <div class="chat-input-area">
+            <button class="attach-btn" type="button" onclick="pickAttachment()" title="Attach file">+</button>
             <input
                 type="text"
                 id="message-input"
@@ -85,15 +168,39 @@
         </div>
     </div>
 </div>
+<input type="file" id="attachment-input" style="display:none" onchange="handleAttachmentSelect(event)">
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    const token = localStorage.getItem('access_token');
+    let token = localStorage.getItem('access_token');
     const username = localStorage.getItem('username');
     const otherUsername = '{{ other_username }}';
+    let latestMessageId = 0;
+    let dmPollHandle = null;
+    let selectedAttachment = null;
 
-    if (!token) window.location.href = '/login/';
+    function renderHeaderAvatar(user) {
+        const avatar = document.getElementById('dm-avatar');
+        const profilePictureUrl = user?.profile_picture_url;
+        if (profilePictureUrl) {
+            avatar.innerHTML = `<img src="${profilePictureUrl}" alt="${user.username}">`;
+            return;
+        }
+        avatar.textContent = (user?.username || otherUsername)[0].toUpperCase();
+    }
+
+    async function loadOtherUserProfile() {
+        const response = await fetch(`/api/users/search/?q=${encodeURIComponent(otherUsername)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) return;
+        const users = await response.json();
+        const otherUser = users.find(user => user.username === otherUsername);
+        if (!otherUser) return;
+        renderHeaderAvatar(otherUser);
+        updateOnlineStatus(otherUser.is_online);
+    }
 
     async function loadMessages() {
         const response = await fetch(`/api/dm/${otherUsername}/`, {
@@ -105,6 +212,7 @@
         const container = document.getElementById('messages-container');
 
         if (messages.length === 0) {
+            latestMessageId = 0;
             container.innerHTML = `
                 <div style="text-align:center;color:#888;font-size:13px;padding:40px">
                     No messages yet. Say hello to ${otherUsername}! 👋
@@ -112,51 +220,141 @@
             return;
         }
 
-        container.innerHTML = '';
-        messages.forEach(msg => addMessage(msg.sender.username, msg.content, msg.timestamp));
-        scrollToBottom();
+        const newestMessageId = messages[messages.length - 1].id;
+
+        if (!latestMessageId) {
+            container.innerHTML = '';
+            messages.forEach(msg => addMessage(msg));
+            latestMessageId = newestMessageId;
+            scrollToBottom();
+        } else if (newestMessageId > latestMessageId) {
+            const newMessages = messages.filter(msg => msg.id > latestMessageId);
+            newMessages.forEach(msg => addMessage(msg));
+            latestMessageId = newestMessageId;
+            scrollToBottom();
+        }
+
+        if (!container.children.length) {
+            container.innerHTML = '';
+            messages.forEach(msg => addMessage(msg));
+            latestMessageId = newestMessageId;
+            scrollToBottom();
+        }
 
         // Update online status
         const lastMsg = messages[messages.length - 1];
         const otherUser = lastMsg.sender.username === otherUsername
             ? lastMsg.sender : lastMsg.receiver;
+        renderHeaderAvatar(otherUser);
         updateOnlineStatus(otherUser.is_online);
     }
 
     async function sendMessage() {
         const input = document.getElementById('message-input');
         const content = input.value.trim();
-        if (!content) return;
+        if (!content && !selectedAttachment) return;
 
-        const response = await fetch(`/api/dm/${otherUsername}/`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
+        let response;
+        if (selectedAttachment) {
+            const formData = new FormData();
+            formData.append('content', content);
+            formData.append('attachment', selectedAttachment);
+            response = await fetch(`/api/dm/${otherUsername}/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+        } else {
+            response = await fetch(`/api/dm/${otherUsername}/`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content })
+            });
+        }
 
         if (response.ok) {
-            addMessage(username, content, new Date().toISOString());
+            const data = await response.json();
+            const container = document.getElementById('messages-container');
+            if (container.textContent.includes('No messages yet')) {
+                container.innerHTML = '';
+            }
+            addMessage(data);
+            latestMessageId = Math.max(latestMessageId, data.id);
             input.value = '';
+            clearSelectedAttachment();
             scrollToBottom();
         }
     }
 
-    function addMessage(sender, content, timestamp) {
+    function renderAttachment(message) {
+        if (!message.attachment_url) return '';
+        if (message.is_image) {
+            return `
+                <div class="message-attachment">
+                    <a href="${message.attachment_url}" target="_blank" rel="noopener noreferrer">
+                        <img src="${message.attachment_url}" alt="${message.attachment_name || 'Image'}">
+                    </a>
+                </div>
+            `;
+        }
+        return `
+            <div class="message-attachment">
+                <a class="attachment-link" href="${message.attachment_url}" target="_blank" rel="noopener noreferrer">
+                    <span>📄</span>
+                    <span>${message.attachment_name || 'Download attachment'}</span>
+                </a>
+            </div>
+        `;
+    }
+
+    function addMessage(message) {
+        const messageId = message.id;
+        const sender = message.sender.username;
+        if (messageId && document.getElementById(`dm-message-${messageId}`)) {
+            return;
+        }
+
         const container = document.getElementById('messages-container');
         const isMine = sender === username;
-        const time = new Date(timestamp).toLocaleTimeString(
+        const time = new Date(message.timestamp).toLocaleTimeString(
             [], { hour: '2-digit', minute: '2-digit' }
         );
         const div = document.createElement('div');
+        if (messageId) {
+            div.id = `dm-message-${messageId}`;
+        }
         div.className = `message-bubble ${isMine ? 'sent' : 'received'}`;
         div.innerHTML = `
-            <div>${content}</div>
+            ${message.content ? `<div class="message-content">${message.content}</div>` : ''}
+            ${renderAttachment(message)}
             <div class="message-time">${time}</div>
         `;
         container.appendChild(div);
+    }
+
+    function pickAttachment() {
+        document.getElementById('attachment-input').click();
+    }
+
+    function handleAttachmentSelect(event) {
+        selectedAttachment = event.target.files[0] || null;
+        const chip = document.getElementById('attachment-chip');
+        const name = document.getElementById('attachment-name');
+        if (selectedAttachment) {
+            name.textContent = selectedAttachment.name;
+            chip.classList.add('show');
+        } else {
+            chip.classList.remove('show');
+        }
+    }
+
+    function clearSelectedAttachment() {
+        selectedAttachment = null;
+        document.getElementById('attachment-input').value = '';
+        document.getElementById('attachment-chip').classList.remove('show');
     }
 
     function updateOnlineStatus(isOnline) {
@@ -174,8 +372,15 @@
         c.scrollTop = c.scrollHeight;
     }
 
-    loadMessages();
-    // Refresh messages every 3 seconds for DMs
-    setInterval(loadMessages, 3000);
+    async function initializePage() {
+        token = await window.ensureAuthenticated();
+        if (!token) return;
+
+        await loadOtherUserProfile();
+        await loadMessages();
+        dmPollHandle = setInterval(loadMessages, 3000);
+    }
+
+    initializePage();
 </script>
 {% endblock %}

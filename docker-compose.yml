@@ -1,11 +1,6 @@
 version: '3.8'
 
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   db:
     image: postgres:15-alpine
     environment:
@@ -27,10 +22,8 @@ services:
       - .env
     environment:
       - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
-      - redis
 
   celery:
     build: .
@@ -41,10 +34,8 @@ services:
       - .env
     environment:
       - DB_HOST=db
-      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
-      - redis
 
 volumes:
   postgres_data:

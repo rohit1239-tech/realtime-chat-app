@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Admin Panel — ChatApp{% endblock %}
+{% block title %}Requests — ChatApp{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -8,10 +8,44 @@
     .admin-header h2 { font-size: 24px; color: #6c63ff; }
     .admin-header p { color: #888; font-size: 14px; margin-top: 4px; }
     .back-link {
-        color: #888; font-size: 13px;
-        text-decoration: none; display: inline-block; margin-bottom: 16px;
+        width: 42px; height: 42px;
+        color: #ff6b57; font-size: 18px;
+        text-decoration: none; display: inline-flex;
+        align-items: center; justify-content: center;
+        margin-bottom: 16px; border-radius: 50%;
+        border: 2px solid #ff6b57;
+        transition: background 0.2s, color 0.2s, transform 0.2s;
     }
-    .back-link:hover { color: #6c63ff; }
+    .back-link:hover { color: white; background: #ff6b57; transform: translateX(-2px); }
+    .back-link svg {
+        width: 22px;
+        height: 22px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+    .toolbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .toolbar label {
+        color: #aaa;
+        font-size: 13px;
+        min-width: 90px;
+    }
+    .toolbar select {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #2a2a3d;
+        border-radius: 10px;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        font-size: 14px;
+    }
     .room-card {
         background: #1a1a2e; border: 1px solid #2a2a3d;
         border-radius: 12px; padding: 20px; margin-bottom: 16px;
@@ -49,6 +83,21 @@
         font-size: 11px; padding: 2px 8px;
         border-radius: 20px;
     }
+    .section-card {
+        background: #1a1a2e;
+        border: 1px solid #2a2a3d;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .section-card h3 {
+        font-size: 16px;
+        margin-bottom: 12px;
+        color: #e0e0e0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
     .no-rooms {
         text-align: center; color: #888;
         padding: 40px 20px; font-size: 14px;
@@ -58,10 +107,28 @@
 
 {% block content %}
 <div class="admin-container">
-    <a href="/chat/" class="back-link">← Back to Chat</a>
+    <a href="#" class="back-link" onclick="event.preventDefault(); window.goBackOrFallback('/chat/');" title="Back" aria-label="Back">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 7L5 12l5 5" />
+            <path d="M6 12h8a5 5 0 1 0 0 10" opacity="0" />
+            <path d="M6 12h8a5 5 0 1 0 0-10" />
+        </svg>
+    </a>
     <div class="admin-header">
-        <h2>🛡️ Admin Panel</h2>
-        <p>Manage join requests for rooms you created</p>
+        <h2>📥 Requests</h2>
+        <p>Manage friend requests and room join requests</p>
+    </div>
+    <div class="section-card">
+        <h3>Friend Requests</h3>
+        <div id="friend-requests-container">
+            <div class="empty-msg">Loading friend requests...</div>
+        </div>
+    </div>
+    <div class="toolbar">
+        <label for="room-select">Select room</label>
+        <select id="room-select" onchange="renderSelectedRoom()">
+            <option value="">Loading rooms...</option>
+        </select>
     </div>
     <div id="rooms-container">
         <div style="color:#888;text-align:center;padding:40px">Loading...</div>
@@ -71,12 +138,51 @@
 
 {% block extra_js %}
 <script>
-    const token = localStorage.getItem('access_token');
+    let token = localStorage.getItem('access_token');
     const username = localStorage.getItem('username');
-    if (!token) window.location.href = '/login/';
+    let myRooms = [];
+
+    async function loadFriendRequests() {
+        const container = document.getElementById('friend-requests-container');
+        const res = await fetch('/api/friends/requests/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            container.innerHTML = '<div class="empty-msg">Could not load friend requests.</div>';
+            return;
+        }
+
+        const requests = await res.json();
+        if (!requests.length) {
+            container.innerHTML = '<div class="empty-msg">No pending friend requests.</div>';
+            return;
+        }
+
+        container.innerHTML = requests.map(req => `
+            <div class="request-item" id="friend-req-${req.id}">
+                <div>
+                    <div class="request-user">👤 ${req.sender.username}</div>
+                    <div class="request-time">
+                        Sent: ${new Date(req.created_at).toLocaleString()}
+                    </div>
+                </div>
+                <div class="action-btns">
+                    <button class="accept-btn" onclick="handleFriendRequest(${req.id}, 'accept')">
+                        ✓ Accept
+                    </button>
+                    <button class="reject-btn" onclick="handleFriendRequest(${req.id}, 'reject')">
+                        ✗ Reject
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
 
     async function loadAdminPanel() {
         const container = document.getElementById('rooms-container');
+        const roomSelect = document.getElementById('room-select');
+        await loadFriendRequests();
 
         // Fetch ALL rooms
         const res = await fetch('/api/all-rooms/', {
@@ -85,9 +191,10 @@
         const allRooms = await res.json();
 
         // Filter rooms created by ME
-        const myRooms = allRooms.filter(r => r.created_by.username === username);
+        myRooms = allRooms.filter(r => r.created_by.username === username);
 
         if (myRooms.length === 0) {
+            roomSelect.innerHTML = '<option value="">No rooms available</option>';
             container.innerHTML = `
                 <div class="no-rooms">
                     You haven't created any rooms yet.<br>
@@ -96,10 +203,25 @@
             return;
         }
 
-        container.innerHTML = '';
-        for (const room of myRooms) {
-            await renderRoomCard(room, container);
+        roomSelect.innerHTML = myRooms.map((room, index) => `
+            <option value="${room.id}" ${index === 0 ? 'selected' : ''}># ${room.name}</option>
+        `).join('');
+
+        await renderSelectedRoom();
+    }
+
+    async function renderSelectedRoom() {
+        const container = document.getElementById('rooms-container');
+        const roomId = Number(document.getElementById('room-select').value);
+        const room = myRooms.find(item => item.id === roomId);
+
+        if (!room) {
+            container.innerHTML = '<div class="no-rooms">Select a room to manage its requests.</div>';
+            return;
         }
+
+        container.innerHTML = '';
+        await renderRoomCard(room, container);
     }
 
     async function renderRoomCard(room, container) {
@@ -122,6 +244,15 @@
                     : '<span style="font-size:12px;color:#888">No pending requests</span>'
                 }
             </h3>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+                <button
+                    class="reject-btn"
+                    onclick="deleteRoom(${room.id}, '${room.name}')"
+                    style="background:#ff4757;color:white"
+                >
+                    Delete Room
+                </button>
+            </div>
             <div id="requests-${room.id}">
                 ${requests.length === 0
                     ? '<div class="empty-msg">✅ All requests handled</div>'
@@ -151,6 +282,28 @@
         container.appendChild(card);
     }
 
+    async function handleFriendRequest(requestId, action) {
+        const res = await fetch(`/api/friends/requests/${requestId}/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            const reqEl = document.getElementById(`friend-req-${requestId}`);
+            if (reqEl) reqEl.remove();
+            if (!document.querySelector('#friend-requests-container .request-item')) {
+                document.getElementById('friend-requests-container').innerHTML =
+                    '<div class="empty-msg">No pending friend requests.</div>';
+            }
+        } else {
+            alert(data.error || 'Could not update friend request.');
+        }
+    }
+
     async function handleRequest(roomId, requestId, action) {
         const res = await fetch(`/api/rooms/${roomId}/requests/`, {
             method: 'POST',
@@ -175,8 +328,52 @@
         }
     }
 
-    loadAdminPanel();
-    // Refresh every 30 seconds to catch new requests
-    setInterval(loadAdminPanel, 30000);
+    async function deleteRoom(roomId, roomName) {
+        const confirmed = window.confirm(
+            `Delete room "${roomName}"? This will remove its messages and join requests too.`
+        );
+        if (!confirmed) return;
+
+        const res = await fetch(`/api/rooms/${roomId}/delete/`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            const roomCard = document.getElementById(`room-card-${roomId}`);
+            if (roomCard) roomCard.remove();
+            myRooms = myRooms.filter(room => room.id !== roomId);
+
+            if (!myRooms.length) {
+                document.getElementById('room-select').innerHTML = '<option value="">No rooms available</option>';
+                document.getElementById('rooms-container').innerHTML = `
+                    <div class="no-rooms">
+                        You haven't created any rooms yet.<br>
+                        <a href="/chat/" style="color:#6c63ff">Go create one!</a>
+                    </div>`;
+                return;
+            }
+
+            const roomSelect = document.getElementById('room-select');
+            roomSelect.innerHTML = myRooms.map((room, index) => `
+                <option value="${room.id}" ${index === 0 ? 'selected' : ''}># ${room.name}</option>
+            `).join('');
+            await renderSelectedRoom();
+        } else {
+            alert(data.error || 'Could not delete the room.');
+        }
+    }
+
+    async function initializePage() {
+        token = await window.ensureAuthenticated();
+        if (!token) return;
+
+        loadAdminPanel();
+        setInterval(loadAdminPanel, 30000);
+    }
+
+    initializePage();
 </script>
 {% endblock %}

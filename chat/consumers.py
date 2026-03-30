@@ -61,17 +61,46 @@ class ChatConsumer(AsyncWebsocketConsumer):
             content = data.get('content', '')
             message = await self.save_message(content)
 
+            await self.broadcast_message(message, content)
+            await self.notify_offline_members(content)
+        elif message_type == 'broadcast_message':
+            content = data.get('content', '')
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'chat_message',
                     'message': content,
                     'sender': self.user.username,
-                    'timestamp': str(message.timestamp),
-                    'message_id': message.id
+                    'timestamp': data.get('timestamp'),
+                    'message_id': data.get('message_id'),
+                    'attachment_url': data.get('attachment_url'),
+                    'attachment_name': data.get('attachment_name'),
+                    'attachment_type': data.get('attachment_type'),
+                    'is_image': data.get('is_image', False),
                 }
             )
-            await self.notify_offline_members(content)
+            await self.notify_offline_members(
+                content or data.get('attachment_name') or 'Attachment'
+            )
+
+    async def broadcast_message(self, message, content):
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'chat_message',
+                'message': content,
+                'sender': self.user.username,
+                'timestamp': str(message.timestamp),
+                'message_id': message.id,
+                'attachment_url': message.attachment.url if message.attachment else None,
+                'attachment_name': message.attachment.name.rsplit('/', 1)[-1] if message.attachment else None,
+                'attachment_type': message.attachment.name.rsplit('.', 1)[-1].lower() if message.attachment and '.' in message.attachment.name else None,
+                'is_image': (
+                    message.attachment.name.rsplit('.', 1)[-1].lower() in {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'}
+                    if message.attachment and '.' in message.attachment.name else False
+                ),
+            }
+        )
 
     async def chat_message(self, event):
         await self.send(text_data=json.dumps({
@@ -79,7 +108,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
             'sender': event['sender'],
             'timestamp': event['timestamp'],
-            'message_id': event['message_id']
+            'message_id': event['message_id'],
+            'attachment_url': event.get('attachment_url'),
+            'attachment_name': event.get('attachment_name'),
+            'attachment_type': event.get('attachment_type'),
+            'is_image': event.get('is_image', False),
         }))
 
     async def user_status(self, event):
@@ -95,7 +128,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             members = await self.get_room_members()
             for member in members:
                 if member.id != self.user.id:
-                    send_message_notification.delay(
+                    send_message_notification(
                         self.user.username,
                         self.room_name,
                         content,
