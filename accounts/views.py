@@ -1,7 +1,9 @@
 import random
+import logging
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,6 +27,11 @@ from .serializers import (
 
 
 OTP_EXPIRY_MINUTES = 10
+logger = logging.getLogger(__name__)
+
+
+class OTPDeliveryError(Exception):
+    pass
 
 
 def send_email_verification_otp(user):
@@ -43,18 +50,28 @@ def send_email_verification_otp(user):
         expires_at=expires_at,
     )
 
-    send_mail(
-        subject='Your ChatApp verification OTP',
-        message=(
-            f"Hi {user.username}!\n\n"
-            f"Your ChatApp email verification OTP is: {otp_code}\n\n"
-            f"This OTP expires in {OTP_EXPIRY_MINUTES} minutes.\n"
-            "If you didn't create this account, you can ignore this email."
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject='Your ChatApp verification OTP',
+            message=(
+                f"Hi {user.username}!\n\n"
+                f"Your ChatApp email verification OTP is: {otp_code}\n\n"
+                f"This OTP expires in {OTP_EXPIRY_MINUTES} minutes.\n"
+                "If you didn't create this account, you can ignore this email."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed to send verification OTP email for user '%s'.",
+            user.username,
+        )
+        raise OTPDeliveryError(
+            "We couldn't send the verification email right now. "
+            "Please try again in a few minutes."
+        ) from exc
 
 
 class RegisterView(generics.CreateAPIView):
@@ -65,8 +82,15 @@ class RegisterView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        send_email_verification_otp(user)
+        try:
+            with transaction.atomic():
+                user = serializer.save()
+                send_email_verification_otp(user)
+        except OTPDeliveryError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         return Response({
             "message": "Account created. We've sent a 6-digit OTP to your email.",
@@ -146,7 +170,13 @@ class ResendEmailOTPView(APIView):
                 status=status.HTTP_200_OK
             )
 
-        send_email_verification_otp(user)
+        try:
+            send_email_verification_otp(user)
+        except OTPDeliveryError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
         return Response(
             {"message": "A new OTP has been sent to your email."},
             status=status.HTTP_200_OK
