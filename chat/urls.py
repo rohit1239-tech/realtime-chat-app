@@ -6,6 +6,7 @@ from .views import (
     DirectMessageView, DirectMessageConversationListView, UnreadCountView,
     SearchUsersView, SendFriendRequestView, FriendRequestListView,
     ManageFriendRequestView, DeleteMessageView, DeleteRoomView,
+    RequestSummaryView,
 )
 
 urlpatterns = [
@@ -26,4 +27,5 @@ urlpatterns = [
     path('dm/conversations/', DirectMessageConversationListView.as_view(), name='dm-conversations'),
     path('dm/<str:username>/', DirectMessageView.as_view(), name='direct-message'),
     path('unread/', UnreadCountView.as_view(), name='unread-count'),
+    path('requests/summary/', RequestSummaryView.as_view(), name='request-summary'),
 ]

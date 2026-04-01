@@ -2,6 +2,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.contrib.auth.models import User
 from django.db.models import Count, Q, Prefetch
 from .models import (
@@ -11,6 +13,18 @@ from .serializers import (
     RoomSerializer, RoomListSerializer, MessageSerializer, UserSerializer,
     JoinRequestSerializer, FriendRequestSerializer, DirectMessageSerializer
 )
+
+
+def get_friend_relation(user_a, user_b):
+    return FriendRequest.objects.filter(
+        Q(sender=user_a, receiver=user_b) |
+        Q(sender=user_b, receiver=user_a)
+    ).order_by('-updated_at', '-created_at').first()
+
+
+def can_direct_message(user_a, user_b):
+    relation = get_friend_relation(user_a, user_b)
+    return relation is not None and relation.status == 'accepted'
 
 
 class RoomListCreateView(generics.ListCreateAPIView):
@@ -79,9 +93,20 @@ class MessageListCreateView(generics.ListCreateAPIView):
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
-        return Message.objects.filter(room_id=self.kwargs['pk'])
+        return Message.objects.filter(
+            room_id=self.kwargs['pk'],
+            room__members=self.request.user
+        )
 
     def list(self, request, *args, **kwargs):
+        room = Room.objects.filter(pk=self.kwargs['pk']).first()
+        if not room:
+            return Response({"error": "Room not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not room.members.filter(pk=request.user.id).exists():
+            return Response(
+                {"error": "You can only read messages in rooms you joined."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         queryset = self.get_queryset()
         queryset.exclude(sender=request.user).filter(is_read=False).update(
             is_read=True
@@ -91,7 +116,15 @@ class MessageListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         room = Room.objects.get(pk=self.kwargs['pk'])
+        if not room.members.filter(pk=self.request.user.id).exists():
+            raise PermissionError("You can only send messages in rooms you joined.")
         serializer.save(sender=self.request.user, room=room)
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
 
 class UserListView(generics.ListAPIView):
@@ -175,6 +208,15 @@ class DirectMessageView(APIView):
     def get(self, request, username):
         try:
             other_user = User.objects.get(username=username)
+            if not can_direct_message(request.user, other_user):
+                relation = get_friend_relation(request.user, other_user)
+                return Response(
+                    {
+                        "error": "Messages are allowed only after the friend request is accepted.",
+                        "friendship_status": relation.status if relation else "none",
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
             messages = DirectMessage.objects.filter(
                 sender__in=[request.user, other_user],
                 receiver__in=[request.user, other_user]
@@ -190,6 +232,15 @@ class DirectMessageView(APIView):
     def post(self, request, username):
         try:
             receiver = User.objects.get(username=username)
+            if not can_direct_message(request.user, receiver):
+                relation = get_friend_relation(request.user, receiver)
+                return Response(
+                    {
+                        "error": "Messages are allowed only after the friend request is accepted.",
+                        "friendship_status": relation.status if relation else "none",
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
             content = request.data.get('content', '').strip()
             attachment = request.FILES.get('attachment')
             if not content and not attachment:
@@ -204,7 +255,17 @@ class DirectMessageView(APIView):
                 dm,
                 context={'request': request},
             )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            payload = serializer.data
+            channel_layer = get_channel_layer()
+            for user_id in {request.user.id, receiver.id}:
+                async_to_sync(channel_layer.group_send)(
+                    f'dm_user_{user_id}',
+                    {
+                        'type': 'direct_message',
+                        'message': payload,
+                    }
+                )
+            return Response(payload, status=status.HTTP_201_CREATED)
         except User.DoesNotExist:
             return Response({"error": "User not found."}, status=404)
 
@@ -291,6 +352,25 @@ class UnreadCountView(APIView):
             'unread_dms': unread_dms,
             'room_unreads': room_unreads,
             'total': unread_dms + sum(r['count'] for r in room_unreads)
+        })
+
+
+class RequestSummaryView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        friend_requests = FriendRequest.objects.filter(
+            receiver=request.user,
+            status='pending'
+        ).count()
+        room_requests = JoinRequest.objects.filter(
+            room__created_by=request.user,
+            status='pending'
+        ).count()
+        return Response({
+            'friend_requests': friend_requests,
+            'room_requests': room_requests,
+            'total': friend_requests + room_requests,
         })
 
 

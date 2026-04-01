@@ -1,10 +1,17 @@
 import json
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import AccessToken
-from .models import Room, Message, UserProfile
+from .models import DirectMessage, Room, Message, UserProfile
+
+
+def get_token_from_scope(scope):
+    query_string = scope.get('query_string', b'').decode()
+    params = parse_qs(query_string)
+    values = params.get('token')
+    return values[0] if values else None
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -140,11 +147,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_user_from_token(self):
         try:
-            query_string = self.scope.get('query_string', b'').decode()
-            params = dict(
-                p.split('=') for p in query_string.split('&') if '=' in p
-            )
-            token_key = params.get('token')
+            token_key = get_token_from_scope(self.scope)
             if not token_key:
                 return None
             access_token = AccessToken(token_key)
@@ -171,3 +174,59 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def get_room_members(self):
         room = Room.objects.get(name=self.room_name)
         return list(room.members.all())
+
+
+class DirectMessageConsumer(AsyncWebsocketConsumer):
+
+    async def connect(self):
+        self.user = await self.get_user_from_token()
+
+        if self.user is None:
+            await self.close()
+            return
+
+        self.user_group_name = f'dm_user_{self.user.id}'
+        await self.channel_layer.group_add(
+            self.user_group_name,
+            self.channel_name
+        )
+        await self.set_user_online(True)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'user') and self.user:
+            await self.set_user_online(False)
+
+        if hasattr(self, 'user_group_name'):
+            await self.channel_layer.group_discard(
+                self.user_group_name,
+                self.channel_name
+            )
+
+    async def receive(self, text_data):
+        # Direct messages are created via REST for now so attachments
+        # and validation stay in one place; this socket is push-only.
+        return
+
+    async def direct_message(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'direct_message',
+            'message': event['message'],
+        }))
+
+    @database_sync_to_async
+    def get_user_from_token(self):
+        try:
+            token_key = get_token_from_scope(self.scope)
+            if not token_key:
+                return None
+            access_token = AccessToken(token_key)
+            return User.objects.get(id=access_token['user_id'])
+        except Exception:
+            return None
+
+    @database_sync_to_async
+    def set_user_online(self, status):
+        profile, _ = UserProfile.objects.get_or_create(user=self.user)
+        profile.is_online = status
+        profile.save()

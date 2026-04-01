@@ -95,6 +95,40 @@
 
 
 <script>
+function parseJwtPayload(token) {
+    try {
+        const payload = token.split('.')[1];
+        if (!payload) return null;
+        const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+        const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+        return JSON.parse(atob(normalized));
+    } catch (err) {
+        return null;
+    }
+}
+
+function isTokenExpired(token, skewSeconds = 30) {
+    const payload = parseJwtPayload(token);
+    if (!payload?.exp) {
+        return true;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp <= now + skewSeconds;
+}
+
+function redirectToLogin() {
+    const target = '/login/';
+    try {
+        if (window.top && window.top !== window) {
+            window.top.location.href = target;
+            return;
+        }
+    } catch (err) {
+        // Ignore cross-frame access issues and fall back locally.
+    }
+    window.location.href = target;
+}
+
 async function refreshToken(clearOnFailure = false) {
     const refresh = localStorage.getItem('refresh_token');
     if (!refresh) return null;
@@ -108,6 +142,9 @@ async function refreshToken(clearOnFailure = false) {
         if (res.ok) {
             const data = await res.json();
             localStorage.setItem('access_token', data.access);
+            if (data.refresh) {
+                localStorage.setItem('refresh_token', data.refresh);
+            }
             return data.access;
         } else {
             if (clearOnFailure) {
@@ -126,7 +163,7 @@ async function refreshToken(clearOnFailure = false) {
 
 async function ensureAuthenticated() {
     const currentToken = localStorage.getItem('access_token');
-    if (currentToken) {
+    if (currentToken && !isTokenExpired(currentToken)) {
         return currentToken;
     }
 
@@ -135,12 +172,50 @@ async function ensureAuthenticated() {
         return refreshedToken;
     }
 
-    window.location.href = '/login/';
+    redirectToLogin();
     return null;
+}
+
+async function authFetch(url, options = {}, retryOnUnauthorized = true) {
+    let accessToken = await ensureAuthenticated();
+    if (!accessToken) {
+        throw new Error('Authentication required.');
+    }
+
+    const headers = new Headers(options.headers || {});
+    if (!headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${accessToken}`);
+    }
+
+    let response = await fetch(url, { ...options, headers });
+    if (response.status !== 401 || !retryOnUnauthorized) {
+        return response;
+    }
+
+    accessToken = await refreshToken(true);
+    if (!accessToken) {
+        redirectToLogin();
+        throw new Error('Authentication expired.');
+    }
+
+    const retryHeaders = new Headers(options.headers || {});
+    if (!retryHeaders.has('Authorization')) {
+        retryHeaders.set('Authorization', `Bearer ${accessToken}`);
+    }
+
+    response = await fetch(url, { ...options, headers: retryHeaders });
+    if (response.status === 401) {
+        redirectToLogin();
+        throw new Error('Authentication expired.');
+    }
+
+    return response;
 }
 
 window.refreshToken = refreshToken;
 window.ensureAuthenticated = ensureAuthenticated;
+window.authFetch = authFetch;
+window.redirectToLogin = redirectToLogin;
 
 function goBackOrFallback(fallbackUrl = '/chat/') {
     const referrer = document.referrer;
@@ -164,7 +239,6 @@ window.goBackOrFallback = goBackOrFallback;
 const currentPath = window.location.pathname;
 const publicPages = ['/login/', '/register/', '/'];
 if (!publicPages.includes(currentPath)) {
-    refreshToken();
     setInterval(refreshToken, 50 * 60 * 1000);
 }
 </script>

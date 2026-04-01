@@ -133,6 +133,26 @@
         stroke-linecap: round;
         stroke-linejoin: round;
     }
+    .header-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #ff4757;
+        color: white;
+        font-size: 11px;
+        font-weight: 800;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 18px rgba(255, 71, 87, 0.35);
+    }
+    .header-badge.show {
+        display: inline-flex;
+    }
     /* SEARCH */
     .search-box {
         padding: 12px;
@@ -361,16 +381,11 @@
     .right-panel-logo {
         width: 108px;
         height: 108px;
-        border-radius: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, rgba(78,205,196,0.18), rgba(59,167,214,0.12));
-        border: 1px solid rgba(78,205,196,0.14);
-        font-size: 54px;
+        object-fit: contain;
+        display: block;
         position: relative;
         z-index: 1;
-        box-shadow: var(--shadow-card);
+        filter: drop-shadow(0 18px 28px rgba(8, 21, 34, 0.38));
     }
     .right-panel h3 { font-size: 28px; color: var(--text-1); position: relative; z-index: 1; }
     .right-panel p { font-size: 14px; opacity: 0.72; position: relative; z-index: 1; color: var(--text-2); }
@@ -499,7 +514,10 @@
                 </div>
             </div>
             <div class="header-icons">
-                <button class="icon-btn" onclick="window.location.href='/admin-panel/'" title="Requests">📥</button>
+                <button class="icon-btn" onclick="window.location.href='/admin-panel/'" title="Requests" style="position:relative">
+                    📥
+                    <span class="header-badge" id="request-badge">0</span>
+                </button>
                 <button class="icon-btn" onclick="showAllRoomsModal()" title="All Rooms" aria-label="All Rooms">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <rect x="3" y="4" width="7" height="7" rx="1.5" />
@@ -544,7 +562,7 @@
     <!-- RIGHT PANEL -->
     <div class="right-panel">
         <div class="right-panel-welcome">
-            <div class="right-panel-logo">💬</div>
+            <img class="right-panel-logo" src="/static/brand/chatapp-auth-logo.png" alt="ChatApp logo">
             <h3>ChatApp</h3>
             <p>Select a chat to start messaging</p>
             <p style="font-size:12px;opacity:0.4">End-to-end encrypted · Real-time</p>
@@ -653,6 +671,15 @@
     let allRoomsLoadedAt = 0;
     let searchDebounceHandle = null;
     let loadChatsInFlight = null;
+    let currentSearchUsers = [];
+    let requestSummary = { total: 0, friend_requests: 0, room_requests: 0 };
+
+    async function refreshChatSidebar() {
+        updateRequestBadge(await fetchRequestSummary());
+        await loadChats();
+    }
+
+    window.refreshChatSidebar = refreshChatSidebar;
 
     // Random colors for room avatars
     const colors = ['#6c63ff','#ff6584','#43b89c','#f9a825','#e91e63','#2196f3'];
@@ -802,7 +829,8 @@
         });
         if (res.status === 401) { window.location.href = '/login/'; return []; }
         if (!res.ok) { throw new Error('Could not load rooms.'); }
-        cachedAllRooms = await res.json();
+        const data = await res.json();
+        cachedAllRooms = Array.isArray(data) ? data : [];
         allRoomsLoadedAt = Date.now();
         return cachedAllRooms;
     }
@@ -878,7 +906,7 @@
                             ${chat.last_message
                                 ? (chat.last_message.sender === username ? 'You: ' : '') +
                                   (chat.last_message.content || chat.last_message.attachment_name || 'Attachment')
-                                : 'Start a conversation'}
+                                : 'Friends only chat'}
                         </div>
                     </div>
                     <div class="chat-meta">
@@ -916,6 +944,14 @@
         list.innerHTML = items.map(item => item.html).join('');
     }
 
+    function updateRequestBadge(summary) {
+        requestSummary = summary || { total: 0, friend_requests: 0, room_requests: 0 };
+        const badge = document.getElementById('request-badge');
+        const total = requestSummary.total || 0;
+        badge.textContent = total > 99 ? '99+' : String(total);
+        badge.classList.toggle('show', total > 0);
+    }
+
     function renderAllRooms(rooms) {
         const list = document.getElementById('all-rooms-list');
 
@@ -926,15 +962,16 @@
 
         list.innerHTML = rooms.map(room => {
             const isMember = myRoomNames.has(room.name);
+            const createdBy = room.created_by?.username || 'Unknown';
             return `
-            <div class="chat-item ${selectedRoomName === room.name ? 'active' : ''}" data-room-name="${escapeHtml(room.name)}">
+            <div class="chat-item ${isMember ? 'active' : ''}" data-room-name="${escapeHtml(room.name)}">
                 <div class="chat-avatar" style="background:${getColor(room.name)}">
                     ${room.name[0].toUpperCase()}
                 </div>
                 <div class="chat-info">
                     <div class="chat-name"># ${room.name}</div>
                     <div class="chat-preview">
-                        by ${room.created_by.username} · ${room.member_count} members
+                        by ${escapeHtml(createdBy)} · ${room.member_count} members
                         ${room.requires_approval ? ' · 🔒' : ''}
                     </div>
                 </div>
@@ -1011,6 +1048,16 @@
         );
     }
 
+    async function fetchRequestSummary() {
+        const res = await fetch('/api/requests/summary/', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            return { total: 0, friend_requests: 0, room_requests: 0 };
+        }
+        return await res.json();
+    }
+
     async function createRoom() {
         const input = document.getElementById('room-name-input');
         const name = input.value.trim().replace(/\s+/g, '-').toLowerCase();
@@ -1071,6 +1118,11 @@
     }
 
     function openDirectChat(usernameValue) {
+        const user = currentSearchUsers.find(item => item.username === usernameValue);
+        if (user && user.friendship_status !== 'friends') {
+            alert('Messages are allowed only after the friend request is accepted.');
+            return;
+        }
         setActiveChat(`dm:${usernameValue}`);
         renderChats(cachedMyRooms, cachedConversations);
         document.getElementById('chat-frame').src = `/dm/${encodeURIComponent(usernameValue)}/`;
@@ -1108,10 +1160,10 @@
 
     function getFriendActionMarkup(user) {
         if (user.friendship_status === 'friends') {
-            return '<span class="action-chip action-chip-success">Friends</span>';
+            return `<button class="action-chip action-chip-success" onclick="event.stopPropagation(); openDirectChat('${escapeHtml(user.username)}')">Message</button>`;
         }
         if (user.friendship_status === 'outgoing_request') {
-            return '<span class="action-chip action-chip-muted">Request Sent</span>';
+            return '<span class="action-chip action-chip-muted">Waiting</span>';
         }
         if (user.friendship_status === 'incoming_request' && user.incoming_friend_request_id) {
             return `
@@ -1141,6 +1193,7 @@
         ]);
 
         const users = await usersRes.json();
+        currentSearchUsers = users;
         const filteredRooms = rooms.filter(room =>
             room.name.toLowerCase().includes(query.trim().toLowerCase())
         );
@@ -1153,7 +1206,7 @@
         const userHtml = users.length ? `
             <div class="search-group-label">Users</div>
             ${users.map(u => `
-                <div class="user-result" onclick="openDirectChat('${escapeHtml(u.username)}')">
+                <div class="user-result" onclick="${u.friendship_status === 'friends' ? `openDirectChat('${escapeHtml(u.username)}')` : ''}">
                     <div style="display:flex;align-items:center;gap:10px">
                         <div style="width:36px;height:36px;border-radius:50%;background:${getColor(u.username)};
                             display:flex;align-items:center;justify-content:center;
@@ -1171,7 +1224,7 @@
                     </div>
                     <div class="search-result-actions">
                         ${getFriendActionMarkup(u)}
-                        <div style="font-size:12px;color:#6c63ff">Message →</div>
+                        <div style="font-size:12px;color:#6c63ff">${u.friendship_status === 'friends' ? 'Message →' : 'Send request →'}</div>
                     </div>
                 </div>
             `).join('')}
@@ -1192,6 +1245,7 @@
         });
         const data = await res.json();
         alert(data.message || data.error || 'Could not send friend request.');
+        updateRequestBadge(await fetchRequestSummary());
         const query = document.getElementById('search-input').value.trim();
         if (query) {
             searchEverything(query);
@@ -1209,6 +1263,8 @@
         });
         const data = await res.json();
         alert(data.message || data.error || 'Could not update friend request.');
+        updateRequestBadge(await fetchRequestSummary());
+        await loadChats();
         const query = document.getElementById('search-input').value.trim();
         if (query) {
             searchEverything(query);
@@ -1227,8 +1283,18 @@
         const list = document.getElementById('all-rooms-list');
         list.innerHTML = '<div class="empty-msg">Loading rooms...</div>';
         document.getElementById('all-rooms-modal').classList.add('show');
-        const rooms = await fetchAllRooms(true);
-        renderAllRooms(rooms);
+        try {
+            const rooms = await fetchAllRooms(true);
+            renderAllRooms(rooms);
+        } catch (error) {
+            console.error('showAllRoomsModal failed:', error);
+            list.innerHTML = `
+                <div class="empty-msg">
+                    Could not load rooms.<br>
+                    <span style="font-size:13px">Try reopening the modal in a moment.</span>
+                </div>
+            `;
+        }
     }
 
     function hideAllRoomsModal() {
@@ -1267,8 +1333,7 @@
         document.getElementById('current-user').textContent = username;
         setMyAvatar(null);
         await loadProfile();
-        loadChats();
-        setInterval(loadChats, 30000);
+        await refreshChatSidebar();
     }
 
     initializePage();

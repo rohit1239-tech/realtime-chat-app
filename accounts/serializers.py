@@ -42,10 +42,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         return value
 
     def validate_email(self, value):
-        email = value.strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
-            raise serializers.ValidationError("This email is already registered.")
-        return email
+        return value.strip().lower()
 
     def validate_password(self, value):
         # Minimum 8 characters
@@ -91,11 +88,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class VerifyEmailOTPSerializer(serializers.Serializer):
+    username = serializers.CharField()
     email = serializers.EmailField()
     otp = serializers.CharField(min_length=6, max_length=6)
 
 
 class ResendEmailOTPSerializer(serializers.Serializer):
+    username = serializers.CharField()
     email = serializers.EmailField()
 
 

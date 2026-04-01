@@ -81,14 +81,15 @@ class VerifyEmailOTPView(APIView):
         serializer = VerifyEmailOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        username = serializer.validated_data['username'].strip()
         email = serializer.validated_data['email'].strip().lower()
         otp = serializer.validated_data['otp'].strip()
 
         try:
-            user = User.objects.get(email__iexact=email)
+            user = User.objects.get(username=username, email__iexact=email)
         except User.DoesNotExist:
             return Response(
-                {"error": "Invalid email or OTP."},
+                {"error": "Invalid username, email, or OTP."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -101,7 +102,7 @@ class VerifyEmailOTPView(APIView):
 
         if not otp_record:
             return Response(
-                {"error": "Invalid email or OTP."},
+                {"error": "Invalid username, email, or OTP."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -129,12 +130,13 @@ class ResendEmailOTPView(APIView):
         serializer = ResendEmailOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        username = serializer.validated_data['username'].strip()
         email = serializer.validated_data['email'].strip().lower()
-        user = User.objects.filter(email__iexact=email).first()
+        user = User.objects.filter(username=username, email__iexact=email).first()
 
         if not user:
             return Response(
-                {"error": "No account found for this email."},
+                {"error": "No account found for this username and email."},
                 status=status.HTTP_404_NOT_FOUND
             )
 

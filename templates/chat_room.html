@@ -78,17 +78,6 @@
         align-items: center;
     }
     .chat-header h3 { font-size: 18px; }
-    .connection-status {
-        font-size: 12px;
-        padding: 4px 10px;
-        border-radius: 20px;
-        background: #ff475720;
-        color: #ff4757;
-    }
-    .connection-status.connected {
-        background: #2ed57320;
-        color: #2ed573;
-    }
     .messages-container {
         flex: 1;
         overflow-y: auto;
@@ -279,7 +268,6 @@
     <div class="chat-area">
         <div class="chat-header">
             <h3># {{ room_name }}</h3>
-            <span class="connection-status" id="conn-status">Connecting...</span>
         </div>
 
         <div class="messages-container" id="messages-container"></div>
@@ -319,33 +307,32 @@
     let selectedMemberUsername = null;
 
     let socket = null;
+    let reconnectHandle = null;
     const onlineUsers = new Set();
+
+    function setConnectionBadge(label, connected = false) {}
 
     // Load message history
     async function loadMessages() {
         try {
-            const response = await fetch(`/api/rooms/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await window.authFetch('/api/rooms/');
             const rooms = await response.json();
             const room = rooms.find(r => r.name === roomName);
 
             if (!room) return;
             currentRoomId = room.id;
 
-            const detailResponse = await fetch(`/api/rooms/${room.id}/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const detailResponse = await window.authFetch(`/api/rooms/${room.id}/`);
             if (detailResponse.ok) {
                 const roomDetail = await detailResponse.json();
                 renderMembers(roomDetail.members || []);
             }
 
             // Load message history
-            const msgResponse = await fetch(`/api/rooms/${room.id}/messages/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const msgResponse = await window.authFetch(`/api/rooms/${room.id}/messages/`);
             const messages = await msgResponse.json();
+            const container = document.getElementById('messages-container');
+            container.innerHTML = '';
             messages.forEach(msg => {
                 profilePictures[msg.sender.username] = msg.sender.profile_picture_url || null;
                 addMessage(msg);
@@ -358,9 +345,7 @@
 
     async function loadCurrentUserProfile() {
         try {
-            const response = await fetch('/api/auth/profile/', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await window.authFetch('/api/auth/profile/');
             if (!response.ok) return;
             const profile = await response.json();
             profilePictures[username] = profile.profile_picture_url || null;
@@ -392,6 +377,13 @@
 
     // Connect WebSocket with JWT token in URL
     function connectWebSocket() {
+        if (!token) return;
+
+        if (reconnectHandle) {
+            clearTimeout(reconnectHandle);
+            reconnectHandle = null;
+        }
+
         const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
         const encodedRoomName = encodeURIComponent(roomName);
         socket = new WebSocket(
@@ -399,8 +391,7 @@
         );
 
         socket.onopen = () => {
-            document.getElementById('conn-status').textContent = '● Connected';
-            document.getElementById('conn-status').className = 'connection-status connected';
+            setConnectionBadge('● Connected', true);
         };
 
 
@@ -432,11 +423,8 @@
 
 
         socket.onclose = (event) => {
-            document.getElementById('conn-status').textContent = '● Disconnected';
-            document.getElementById('conn-status').className = 'connection-status';
+            setConnectionBadge('● Disconnected', false);
             console.error('WebSocket closed:', event.code, event.reason);
-            // Reconnect after 3 seconds
-            setTimeout(connectWebSocket, 3000);
         };
 
         socket.onerror = (err) => {
@@ -576,9 +564,8 @@
             formData.append('content', content);
             formData.append('attachment', selectedAttachment);
 
-            const response = await fetch(`/api/rooms/${currentRoomId}/messages/`, {
+            const response = await window.authFetch(`/api/rooms/${currentRoomId}/messages/`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
 
@@ -606,10 +593,43 @@
 
             input.value = '';
             clearSelectedAttachment();
+            try {
+                if (window.parent && typeof window.parent.refreshChatSidebar === 'function') {
+                    window.parent.refreshChatSidebar();
+                }
+            } catch (err) {
+                console.error('Could not refresh sidebar after attachment send:', err);
+            }
             return;
         }
 
-        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        if (!currentRoomId) return;
+
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            const response = await window.authFetch(`/api/rooms/${currentRoomId}/messages/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+
+            if (!response.ok) {
+                alert('Could not send message.');
+                return;
+            }
+
+            input.value = '';
+            const data = await response.json();
+            addMessage(data);
+            scrollToBottom();
+            try {
+                if (window.parent && typeof window.parent.refreshChatSidebar === 'function') {
+                    window.parent.refreshChatSidebar();
+                }
+            } catch (err) {
+                console.error('Could not refresh sidebar after message send:', err);
+            }
+            return;
+        }
 
         // Show MY message immediately on MY screen
         addMessage({
@@ -628,6 +648,13 @@
         }));
 
         input.value = '';
+        try {
+            if (window.parent && typeof window.parent.refreshChatSidebar === 'function') {
+                window.parent.refreshChatSidebar();
+            }
+        } catch (err) {
+            console.error('Could not refresh sidebar after socket message send:', err);
+        }
     }
     function handleKeyPress(e) {
         if (e.key === 'Enter') sendMessage();
@@ -643,7 +670,7 @@
         if (!token) return;
 
         await loadCurrentUserProfile();
-        loadMessages();
+        await loadMessages();
         connectWebSocket();
     }
 

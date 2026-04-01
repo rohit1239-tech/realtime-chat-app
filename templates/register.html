@@ -38,19 +38,17 @@
         background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent 36%);
         pointer-events: none;
     }
+    .auth-brand {
+        text-align: center;
+        margin-bottom: 18px;
+    }
     .auth-logo {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 72px;
-        height: 72px;
-        border-radius: 22px;
-        margin: 0 auto 16px;
-        background: linear-gradient(135deg, rgba(78, 205, 196, 0.22), rgba(59, 167, 214, 0.18));
-        border: 1px solid rgba(78, 205, 196, 0.22);
-        color: #d9fbf7;
-        font-size: 32px;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        width: 108px;
+        height: 108px;
+        object-fit: contain;
+        display: block;
+        margin: 0 auto 14px;
+        filter: drop-shadow(0 16px 28px rgba(10, 21, 34, 0.35));
     }
     .auth-logo-text {
         text-align: center;
@@ -97,9 +95,12 @@
 
 {% block content %}
 <div class="auth-container">
+    <div style="width:100%;max-width:480px;position:relative;z-index:1">
+        <div class="auth-brand">
+            <img class="auth-logo" src="/static/brand/chatapp-auth-logo.png" alt="ChatApp logo">
+            <div class="auth-logo-text">ChatApp</div>
+        </div>
     <div class="auth-card">
-        <div class="auth-logo">✦</div>
-        <div class="auth-logo-text">ChatApp</div>
         <div class="auth-subtitle">Create your account to get started.</div>
 
         <div id="alert-box"></div>
@@ -150,12 +151,14 @@
             Already have an account? <a href="/login/">Sign In</a>
         </div>
     </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     let pendingEmail = '';
+    let pendingUsername = '';
 
     async function register() {
         const username = document.getElementById('username').value;
@@ -197,6 +200,7 @@
             const data = await response.json();
 
             if (response.ok) {
+                pendingUsername = username;
                 pendingEmail = data.email || email;
                 document.getElementById('otp-panel').style.display = 'block';
                 document.getElementById('otp-email-label').textContent = pendingEmail;
@@ -216,11 +220,12 @@
 
     async function verifyOtp() {
         const otp = document.getElementById('otp').value.trim();
+        const username = pendingUsername || document.getElementById('username').value.trim();
         const email = pendingEmail || document.getElementById('email').value.trim();
         const alertBox = document.getElementById('alert-box');
 
-        if (!email || !otp) {
-            alertBox.innerHTML = '<div class="alert alert-error">Enter your email OTP to continue.</div>';
+        if (!username || !email || !otp) {
+            alertBox.innerHTML = '<div class="alert alert-error">Enter your username, email, and OTP to continue.</div>';
             return;
         }
 
@@ -228,7 +233,7 @@
             const response = await fetch('/api/auth/verify-email-otp/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp })
+                body: JSON.stringify({ username, email, otp })
             });
 
             const data = await response.json();
@@ -247,11 +252,12 @@
     }
 
     async function resendOtp() {
+        const username = pendingUsername || document.getElementById('username').value.trim();
         const email = pendingEmail || document.getElementById('email').value.trim();
         const alertBox = document.getElementById('alert-box');
 
-        if (!email) {
-            alertBox.innerHTML = '<div class="alert alert-error">Enter your email first.</div>';
+        if (!username || !email) {
+            alertBox.innerHTML = '<div class="alert alert-error">Enter your username and email first.</div>';
             return;
         }
 
@@ -259,7 +265,7 @@
             const response = await fetch('/api/auth/resend-email-otp/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
+                body: JSON.stringify({ username, email })
             });
 
             const data = await response.json();

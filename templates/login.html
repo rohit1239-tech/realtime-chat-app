@@ -26,10 +26,6 @@
         position: relative;
         z-index: 1;
     }
-    .auth-brand {
-        text-align: center;
-        margin-bottom: 18px;
-    }
     .auth-card {
         position: relative;
         background: linear-gradient(180deg, rgba(17, 34, 53, 0.88), rgba(8, 19, 31, 0.94));
@@ -47,18 +43,17 @@
         background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent 36%);
         pointer-events: none;
     }
+    .auth-brand {
+        text-align: center;
+        margin-bottom: 18px;
+    }
     .auth-logo {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
         width: 108px;
         height: 108px;
-        border-radius: 32px;
-        margin: 0 auto 16px;
-        background: linear-gradient(135deg, rgba(78, 205, 196, 0.18), rgba(59, 167, 214, 0.12));
-        border: 1px solid rgba(78, 205, 196, 0.14);
-        color: #d9fbf7;
-        box-shadow: var(--shadow-card);
+        object-fit: contain;
+        display: block;
+        margin: 0 auto 14px;
+        filter: drop-shadow(0 16px 28px rgba(10, 21, 34, 0.35));
     }
     .auth-logo-text {
         text-align: center;
@@ -98,14 +93,6 @@
         .auth-card {
             padding: 26px 20px;
         }
-        .auth-logo {
-            width: 94px;
-            height: 94px;
-            border-radius: 28px;
-        }
-        .auth-logo-text {
-            font-size: 24px;
-        }
     }
 </style>
 {% endblock %}
@@ -114,17 +101,9 @@
 <div class="auth-container">
     <div class="auth-shell">
         <div class="auth-brand">
-            <div class="auth-logo" aria-hidden="true">
-                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M17.5 22.5C17.5 14.768 24.2158 8.5 32.5 8.5C40.7842 8.5 47.5 14.768 47.5 22.5C47.5 30.232 40.7842 36.5 32.5 36.5H30.3L22.5 43.5V35.4C19.4532 32.8161 17.5 27.9627 17.5 22.5Z" fill="white" stroke="#1C2126" stroke-width="3.2" stroke-linejoin="round"/>
-                    <circle cx="26" cy="22.5" r="2.8" fill="#7E8892"/>
-                    <circle cx="32.5" cy="22.5" r="2.8" fill="#7E8892"/>
-                    <circle cx="39" cy="22.5" r="2.8" fill="#7E8892"/>
-                </svg>
-            </div>
+            <img class="auth-logo" src="/static/brand/chatapp-auth-logo.png" alt="ChatApp logo">
             <div class="auth-logo-text">ChatApp</div>
         </div>
-
         <div class="auth-card">
             <div class="auth-subtitle">Welcome back! Sign in to continue.</div>
 

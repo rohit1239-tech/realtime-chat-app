@@ -131,6 +131,20 @@
         font-size: 12px; padding: 3px 10px;
         border-radius: 20px; background: #88888820; color: #888;
     }
+    .blocked-note {
+        margin: 24px;
+        padding: 16px 18px;
+        border-radius: 14px;
+        background: rgba(255, 71, 87, 0.1);
+        border: 1px solid rgba(255, 71, 87, 0.22);
+        color: #ffb3bb;
+        font-size: 13px;
+        display: none;
+    }
+    .chat-input-area.disabled {
+        opacity: 0.55;
+        pointer-events: none;
+    }
 </style>
 {% endblock %}
 
@@ -150,6 +164,7 @@
                 Loading messages...
             </div>
         </div>
+        <div class="blocked-note" id="blocked-note"></div>
 
         <div class="attachment-chip" id="attachment-chip">
             <span id="attachment-name"></span>
@@ -177,8 +192,19 @@
     const username = localStorage.getItem('username');
     const otherUsername = '{{ other_username }}';
     let latestMessageId = 0;
-    let dmPollHandle = null;
+    let dmSocket = null;
+    let dmReconnectHandle = null;
     let selectedAttachment = null;
+    let canMessage = true;
+
+    function setMessagingState(allowed, message = '') {
+        canMessage = allowed;
+        const blockedNote = document.getElementById('blocked-note');
+        const inputArea = document.querySelector('.chat-input-area');
+        blockedNote.style.display = allowed ? 'none' : 'block';
+        blockedNote.textContent = message;
+        inputArea.classList.toggle('disabled', !allowed);
+    }
 
     function renderHeaderAvatar(user) {
         const avatar = document.getElementById('dm-avatar');
@@ -191,9 +217,7 @@
     }
 
     async function loadOtherUserProfile() {
-        const response = await fetch(`/api/users/search/?q=${encodeURIComponent(otherUsername)}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await window.authFetch(`/api/users/search/?q=${encodeURIComponent(otherUsername)}`);
         if (!response.ok) return;
         const users = await response.json();
         const otherUser = users.find(user => user.username === otherUsername);
@@ -203,12 +227,20 @@
     }
 
     async function loadMessages() {
-        const response = await fetch(`/api/dm/${otherUsername}/`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (response.status === 401) { window.location.href = '/login/'; return; }
+        const response = await window.authFetch(`/api/dm/${otherUsername}/`);
+        if (response.status === 403) {
+            const data = await response.json();
+            setMessagingState(false, data.error || 'Messages are allowed only after the request is accepted.');
+            const container = document.getElementById('messages-container');
+            container.innerHTML = `
+                <div style="text-align:center;color:#888;font-size:13px;padding:40px">
+                    Chat will open after the request is accepted.
+                </div>`;
+            return;
+        }
 
         const messages = await response.json();
+        setMessagingState(true);
         const container = document.getElementById('messages-container');
 
         if (messages.length === 0) {
@@ -249,7 +281,55 @@
         updateOnlineStatus(otherUser.is_online);
     }
 
+    function connectDirectMessageSocket() {
+        if (!token) return;
+
+        if (dmReconnectHandle) {
+            clearTimeout(dmReconnectHandle);
+            dmReconnectHandle = null;
+        }
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        dmSocket = new WebSocket(
+            `${wsProtocol}://${window.location.host}/ws/dm/?token=${encodeURIComponent(token)}`
+        );
+
+        dmSocket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type !== 'direct_message' || !data.message) {
+                return;
+            }
+
+            const message = data.message;
+            const participants = [message.sender?.username, message.receiver?.username];
+            if (!participants.includes(username) || !participants.includes(otherUsername)) {
+                return;
+            }
+
+            const container = document.getElementById('messages-container');
+            if (container.textContent.includes('No messages yet')) {
+                container.innerHTML = '';
+            }
+
+            addMessage(message);
+            latestMessageId = Math.max(latestMessageId, message.id || 0);
+            scrollToBottom();
+            updateOnlineStatus(true);
+        };
+
+        dmSocket.onclose = () => {
+            dmSocket = null;
+        };
+
+        dmSocket.onerror = () => {
+            if (dmSocket) {
+                dmSocket.close();
+            }
+        };
+    }
+
     async function sendMessage() {
+        if (!canMessage) return;
         const input = document.getElementById('message-input');
         const content = input.value.trim();
         if (!content && !selectedAttachment) return;
@@ -259,20 +339,24 @@
             const formData = new FormData();
             formData.append('content', content);
             formData.append('attachment', selectedAttachment);
-            response = await fetch(`/api/dm/${otherUsername}/`, {
+            response = await window.authFetch(`/api/dm/${otherUsername}/`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
         } else {
-            response = await fetch(`/api/dm/${otherUsername}/`, {
+            response = await window.authFetch(`/api/dm/${otherUsername}/`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ content })
             });
+        }
+
+        if (response.status === 403) {
+            const data = await response.json();
+            setMessagingState(false, data.error || 'Messages are allowed only after the request is accepted.');
+            return;
         }
 
         if (response.ok) {
@@ -282,10 +366,17 @@
                 container.innerHTML = '';
             }
             addMessage(data);
-            latestMessageId = Math.max(latestMessageId, data.id);
+            latestMessageId = Math.max(latestMessageId, data.id || 0);
+            scrollToBottom();
             input.value = '';
             clearSelectedAttachment();
-            scrollToBottom();
+            try {
+                if (window.parent && typeof window.parent.refreshChatSidebar === 'function') {
+                    window.parent.refreshChatSidebar();
+                }
+            } catch (err) {
+                console.error('Could not refresh sidebar after DM send:', err);
+            }
         }
     }
 
@@ -364,7 +455,7 @@
     }
 
     function handleKeyPress(e) {
-        if (e.key === 'Enter') sendMessage();
+        if (e.key === 'Enter' && canMessage) sendMessage();
     }
 
     function scrollToBottom() {
@@ -378,7 +469,7 @@
 
         await loadOtherUserProfile();
         await loadMessages();
-        dmPollHandle = setInterval(loadMessages, 3000);
+        connectDirectMessageSocket();
     }
 
     initializePage();
