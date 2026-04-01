@@ -44,9 +44,7 @@ Supports direct messaging, chat rooms, friend requests, and real-time presence.
 - JavaScript  
 
 ### Database & Cache
-- PostgreSQL  
-- Redis  
-- MongoDB  
+- PostgreSQL   
 
 ### Authentication
 - JWT Authentication  
@@ -56,7 +54,6 @@ Supports direct messaging, chat rooms, friend requests, and real-time presence.
 - Git  
 - GitHub  
 - Docker  
-- CI/CD  
 - Postman  
 - Render Deployment  
 
