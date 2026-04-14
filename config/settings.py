@@ -100,8 +100,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-EMAIL_BACKEND = os.getenv(
-    'EMAIL_BACKEND',
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND') or (
     'django.core.mail.backends.smtp.EmailBackend'
     if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD
     else 'django.core.mail.backends.console.EmailBackend'
@@ -111,9 +110,10 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20'))
-DEFAULT_FROM_EMAIL = os.getenv(
-    'DEFAULT_FROM_EMAIL',
-    EMAIL_HOST_USER or 'noreply@chatapp.com'
+DEFAULT_FROM_EMAIL = (
+    os.getenv('DEFAULT_FROM_EMAIL')
+    or EMAIL_HOST_USER
+    or 'noreply@chatapp.com'
 )
 
 # Password reset URL
