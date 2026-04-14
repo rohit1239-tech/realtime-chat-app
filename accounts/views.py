@@ -50,6 +50,12 @@ def send_email_verification_otp(user):
         expires_at=expires_at,
     )
 
+    from_email = (
+        settings.DEFAULT_FROM_EMAIL
+        or settings.EMAIL_HOST_USER
+        or 'noreply@chatapp.com'
+    )
+
     try:
         send_mail(
             subject='Your ChatApp verification OTP',
@@ -59,7 +65,7 @@ def send_email_verification_otp(user):
                 f"This OTP expires in {OTP_EXPIRY_MINUTES} minutes.\n"
                 "If you didn't create this account, you can ignore this email."
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=from_email,
             recipient_list=[user.email],
             fail_silently=False,
         )
